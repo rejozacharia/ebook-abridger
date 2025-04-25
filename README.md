@@ -68,6 +68,7 @@ This tool provides both a command-line interface (CLI) and a graphical user inte
     Open the `.env` file and add your OpenRouter API key:
     ```dotenv
     OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY_HERE
+    OPENAI_API_BASE=https://openrouter.ai/api/v1     # endpoint for OpenRouter
     ```
     Replace `YOUR_OPENROUTER_API_KEY_HERE` with your actual key obtained from [OpenRouter.ai](https://openrouter.ai/).
 

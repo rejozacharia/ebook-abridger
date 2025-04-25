@@ -1,305 +1,177 @@
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.llms import Ollama # Use LLM wrapper for Ollama
-from langchain_community.chat_models import ChatOpenRouter # Reverting to previous import attempt
+from pydantic import Field, SecretStr
 
-# Configure logging
+# --- External LLM clients ---
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.llms import Ollama
+from langchain_openai import ChatOpenAI
+from langchain_core.utils.utils import secret_from_env
+
+# --- Logging setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Load environment variables from .env file
-# Explicitly load .env file from the same directory as this script
+# --- Load .env ---
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path=dotenv_path)
     logging.info(f"Loaded environment variables from: {dotenv_path}")
 else:
-    logging.warning(f".env file not found at expected location: {dotenv_path}. API keys might be missing.")
-    # Attempt default load_dotenv() as a fallback, might find it elsewhere
+    logging.warning(f".env file not found at expected location: {dotenv_path}.")
     load_dotenv()
 
 # --- Constants ---
-DEFAULT_TEMPERATURE = 0.3 # Lower temperature for more deterministic summaries
+DEFAULT_TEMPERATURE = 0.3
 
-# --- Model Configuration Parsing ---
+# --- OpenRouter subclass of ChatOpenAI ---
+class ChatOpenRouter(ChatOpenAI):
+    """
+    Treat OpenRouter.ai as an OpenAI-compatible endpoint.
+    Reads OPENROUTER_API_KEY and OPENAI_API_BASE from env.
+    """
+    openai_api_key: SecretStr = Field(
+        alias="api_key",
+        default_factory=secret_from_env("OPENROUTER_API_KEY", default=None),
+    )
 
-# Store parsed models to avoid re-parsing every time
-_MODEL_CONFIG = {}
+    @property
+    def lc_secrets(self) -> dict[str, str]:
+        # ensure the secret is mapped correctly for runtime
+        return {"openai_api_key": "OPENROUTER_API_KEY"}
 
-def _parse_models_from_env(env_var_name: str):
-    """Parses model list and default from an environment variable."""
+
+# --- Model config parsing ---
+_MODEL_CONFIG: dict[str, dict[str, list[str] | str | None]] = {}
+
+def _parse_models_from_env(env_var_name: str) -> tuple[list[str], str | None]:
     models_str = os.getenv(env_var_name, "")
     if not models_str:
-        return [], None # Return empty list and no default if var is not set
+        return [], None
 
-    models = [m.strip() for m in models_str.split(',')]
-    default_model = None
-    cleaned_models = []
-
-    for model in models:
-        if model.endswith('*'):
-            model_name = model[:-1]
-            if not default_model: # Take the first one marked as default
-                 default_model = model_name
-            cleaned_models.append(model_name)
+    models = []
+    default = None
+    for token in models_str.split(','):
+        m = token.strip()
+        if m.endswith('*'):
+            name = m[:-1]
+            default = default or name
+            models.append(name)
         else:
-            cleaned_models.append(model)
+            models.append(m)
+    if not default and models:
+        default = models[0]
+    return models, default
 
-    if not default_model and cleaned_models:
-         default_model = cleaned_models[0] # Fallback: use the first model if none is marked
-
-    return cleaned_models, default_model
-
-def _load_model_config():
-    """Loads model configurations for all providers from environment variables."""
+def _load_model_config() -> None:
     global _MODEL_CONFIG
-    if not _MODEL_CONFIG: # Load only once
-        google_models, google_default = _parse_models_from_env("GOOGLE_MODELS")
-        google_models, google_default = _parse_models_from_env("GOOGLE_MODELS")
-        ollama_models, ollama_default = _parse_models_from_env("OLLAMA_MODELS")
-        openrouter_models, openrouter_default = _parse_models_from_env("OPENROUTER_MODELS")
+    if _MODEL_CONFIG:
+        return
 
-        _MODEL_CONFIG = {
-            "google": {"models": google_models, "default": google_default},
-            "ollama": {"models": ollama_models, "default": ollama_default},
-            "openrouter": {"models": openrouter_models, "default": openrouter_default},
-        }
-        # Add fallback defaults if parsing failed but provider is known
-        if not _MODEL_CONFIG["google"]["default"]:
-             _MODEL_CONFIG["google"]["default"] = "gemini-1.5-flash" # Hardcoded fallback
-             logging.warning("No default Google model found in .env, using 'gemini-1.5-flash'.")
-        if not _MODEL_CONFIG["ollama"]["default"]:
-             _MODEL_CONFIG["ollama"]["default"] = "llama3" # Hardcoded fallback
-             logging.warning("No default Ollama model found in .env, using 'llama3'.")
-        if not _MODEL_CONFIG["openrouter"]["default"]:
-             # Example fallback - user should configure this in .env
-             _MODEL_CONFIG["openrouter"]["default"] = "mistralai/mistral-7b-instruct"
-             logging.warning("No default OpenRouter model found in .env, using 'mistralai/mistral-7b-instruct'.")
+    google_models, google_def = _parse_models_from_env("GOOGLE_MODELS")
+    ollama_models, ollama_def = _parse_models_from_env("OLLAMA_MODELS")
+    openr_models, openr_def = _parse_models_from_env("OPENROUTER_MODELS")
 
-# Load config when module is imported
+    _MODEL_CONFIG = {
+        "google":  {"models": google_models,   "default": google_def},
+        "ollama":  {"models": ollama_models,   "default": ollama_def},
+        "openrouter": {"models": openr_models,  "default": openr_def},
+    }
+
+    # Fallback defaults
+    if not _MODEL_CONFIG["google"]["default"]:
+        _MODEL_CONFIG["google"]["default"] = "gemini-1.5-flash"
+        logging.warning("No default Google model in .env; using 'gemini-1.5-flash'.")
+    if not _MODEL_CONFIG["ollama"]["default"]:
+        _MODEL_CONFIG["ollama"]["default"] = "llama3"
+        logging.warning("No default Ollama model in .env; using 'llama3'.")
+    if not _MODEL_CONFIG["openrouter"]["default"]:
+        _MODEL_CONFIG["openrouter"]["default"] = "mistralai/mistral-7b-instruct"
+        logging.warning("No default OpenRouter model in .env; using 'mistralai/mistral-7b-instruct'.")
+
+# populate on import
 _load_model_config()
 
 def get_available_models(provider: str) -> list[str]:
-    """Returns the list of available models for a given provider."""
-    provider = provider.lower()
-    return _MODEL_CONFIG.get(provider, {}).get("models", [])
+    return _MODEL_CONFIG.get(provider.lower(), {}).get("models", [])
 
 def get_default_model(provider: str) -> str | None:
-    """Returns the default model name for a given provider."""
-    provider = provider.lower()
-    return _MODEL_CONFIG.get(provider, {}).get("default")
+    return _MODEL_CONFIG.get(provider.lower(), {}).get("default")
 
 
-# --- LLM Initialization ---
+# --- LLM factories ---
 
 def get_google_genai_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    """
-    Initializes and returns a LangChain ChatGoogleGenerativeAI LLM instance.
-
-    Args:
-        model_name: The specific Gemini model to use (e.g., "gemini-1.5-pro", "gemini-1.5-flash").
-        temperature: The sampling temperature for the model.
-
-    Returns:
-        An initialized ChatGoogleGenerativeAI instance, or None if API key is missing.
-    """
     api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key or api_key == "YOUR_GOOGLE_API_KEY_HERE":
-        logging.error("GOOGLE_API_KEY not found or not set in .env file. Cannot initialize Gemini LLM.")
+    if not api_key:
+        logging.error("GOOGLE_API_KEY missing; cannot init Gemini.")
         return None
-    
     try:
         llm = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=api_key,
             temperature=temperature,
-            convert_system_message_to_human=True # Often needed for Gemini compatibility
+            convert_system_message_to_human=True
         )
-        logging.info(f"Initialized Google GenAI LLM with model: {model_name}")
+        logging.info(f"Initialized Google GenAI LLM: {model_name}")
         return llm
     except Exception as e:
-        logging.error(f"Failed to initialize Google GenAI LLM ({model_name}): {e}", exc_info=True)
+        logging.error(f"Google GenAI init error ({model_name}): {e}", exc_info=True)
         return None
 
 def get_ollama_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    """
-    Initializes and returns a LangChain Ollama LLM instance.
-
-    Args:
-        model_name: The specific Ollama model to use (e.g., "llama3", "llama4-scout").
-        temperature: The sampling temperature for the model.
-
-    Returns:
-        An initialized Ollama instance, or None if Ollama service is unavailable.
-    """
-    base_url = os.getenv("OLLAMA_BASE_URL") # Optional override from .env
-    
+    params = {"model": model_name, "temperature": temperature}
+    base = os.getenv("OLLAMA_BASE_URL")
+    if base:
+        params["base_url"] = base
+        logging.info(f"Ollama base URL override: {base}")
     try:
-        llm_params = {
-            "model": model_name,
-            "temperature": temperature,
-        }
-        if base_url:
-            llm_params["base_url"] = base_url
-            logging.info(f"Using Ollama base URL: {base_url}")
-            
-        llm = Ollama(**llm_params)
-        
-        # Optional: Add a quick check to see if the Ollama service is reachable
-        # Note: This might slow down initialization slightly.
-        # try:
-        #     llm.invoke("Hi") # Simple test prompt
-        # except Exception as check_err:
-        #     logging.error(f"Ollama service check failed for model '{model_name}': {check_err}")
-        #     raise ConnectionError(f"Could not connect to Ollama service for model '{model_name}'. Is it running?") from check_err
-
-        logging.info(f"Initialized Ollama LLM with model: {model_name}")
+        llm = Ollama(**params)
+        logging.info(f"Initialized Ollama LLM: {model_name}")
         return llm
     except Exception as e:
-        logging.error(f"Failed to initialize Ollama LLM ({model_name}): {e}", exc_info=True)
-        # Re-raise specific error if connection failed during check
-        if isinstance(e, ConnectionError):
-             raise
+        logging.error(f"Ollama init error ({model_name}): {e}", exc_info=True)
         return None
 
 def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
     """
-    Initializes and returns a LangChain ChatOpenRouter LLM instance.
-
-    Args:
-        model_name: The specific OpenRouter model to use (e.g., "mistralai/mistral-7b-instruct").
-        temperature: The sampling temperature for the model.
-
-    Returns:
-        An initialized ChatOpenRouter instance, or None if API key is missing.
+    Uses our ChatOpenRouter subclass to target OpenRouter.ai.
+    Requires in .env:
+      OPENROUTER_API_KEY=<your key>
+      OPENAI_API_BASE=https://openrouter.ai/api/v1
     """
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key or api_key == "YOUR_OPENROUTER_API_KEY_HERE":
-        logging.error("OPENROUTER_API_KEY not found or not set in .env file. Cannot initialize OpenRouter LLM.")
+    api_base = os.getenv("OPENAI_API_BASE")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        logging.error("OPENROUTER_API_KEY missing; cannot init OpenRouter LLM.")
         return None
-
     try:
         llm = ChatOpenRouter(
-            model_name=model_name,
-            openrouter_api_key=api_key,
+            model_name,
             temperature=temperature,
-            # Add other OpenRouter specific parameters if needed
+            openai_api_base=api_base  # passed through ChatOpenAI base
         )
-        logging.info(f"Initialized OpenRouter LLM with model: {model_name}")
+        logging.info(f"Initialized OpenRouter LLM: {model_name}")
         return llm
     except Exception as e:
-        logging.error(f"Failed to initialize OpenRouter LLM ({model_name}): {e}", exc_info=True)
+        logging.error(f"OpenRouter init error ({model_name}): {e}", exc_info=True)
         return None
 
-
-# --- Helper Function ---
 def get_llm_instance(provider: str, model_name: str = None, temperature: float = DEFAULT_TEMPERATURE):
     """
-    Gets an initialized LLM instance based on the provider name.
-
-    Args:
-        provider: The LLM provider ("google", "ollama").
-        model_name: The specific model name. If None, uses the default for the provider.
-        temperature: The sampling temperature.
-
-    Returns:
-        An initialized LangChain LLM instance, or None if initialization fails.
+    Return an initialized LLM for 'google', 'ollama', or 'openrouter'.
     """
-    provider = provider.lower()
-    # Use specified model or get the default from config
-    target_model = model_name or get_default_model(provider)
-
-    if not target_model:
-         logging.error(f"No model specified and no default found for provider '{provider}'.")
-         return None
-
-    if provider == "google":
-        return get_google_genai_llm(model_name=target_model, temperature=temperature)
-    elif provider == "ollama":
-        return get_ollama_llm(model_name=target_model, temperature=temperature)
-    elif provider == "openrouter":
-        return get_openrouter_llm(model_name=target_model, temperature=temperature)
-    else:
-        logging.error(f"Unsupported LLM provider: {provider}")
+    prov = provider.lower()
+    model = model_name or get_default_model(prov)
+    if not model:
+        logging.error(f"No model given or default for provider '{prov}'.")
         return None
 
-# Example usage (for testing purposes)
-if __name__ == '__main__':
-    print("\n--- LLM Configuration Test ---")
-
-    print("\n--- Testing Model Configuration ---")
-    print(f"Google Models: {get_available_models('google')}")
-    print(f"Google Default: {get_default_model('google')}")
-    print(f"Ollama Models: {get_available_models('ollama')}")
-    print(f"Ollama Default: {get_default_model('ollama')}")
-    print(f"OpenRouter Models: {get_available_models('openrouter')}")
-    print(f"OpenRouter Default: {get_default_model('openrouter')}")
-
-    print("\n--- Testing LLM Initialization (using defaults from .env) ---")
-    print("\nTesting Google Gemini LLM (default):")
-    default_google_model = get_default_model('google')
-    if default_google_model:
-        gemini_llm = get_llm_instance("google") # Uses default
-        if gemini_llm:
-            print(f"  Successfully initialized Default Google LLM ({default_google_model}): {type(gemini_llm)}")
-        else:
-            print(f"  Failed to initialize Default Google LLM ({default_google_model}). Check GOOGLE_API_KEY in .env")
+    if prov == "google":
+        return get_google_genai_llm(model, temperature)
+    elif prov == "ollama":
+        return get_ollama_llm(model, temperature)
+    elif prov == "openrouter":
+        return get_openrouter_llm(model, temperature)
     else:
-         print("  No default Google model configured in .env")
-
-
-    print("\nTesting Ollama LLM (default):")
-    default_ollama_model = get_default_model('ollama')
-    if default_ollama_model:
-        ollama_llm = get_llm_instance("ollama") # Uses default
-        if ollama_llm:
-            print(f"  Successfully initialized Default Ollama LLM ({default_ollama_model}): {type(ollama_llm)}")
-            print(f"  Model name reported by instance: {ollama_llm.model}")
-        else:
-            print(f"  Failed to initialize Default Ollama LLM ({default_ollama_model}). Is Ollama service running?")
-    else:
-         print("  No default Ollama model configured in .env")
-
-    print("\nTesting OpenRouter LLM (default):")
-    default_openrouter_model = get_default_model('openrouter')
-    if default_openrouter_model:
-        openrouter_llm = get_llm_instance("openrouter") # Uses default
-        if openrouter_llm:
-            print(f"  Successfully initialized Default OpenRouter LLM ({default_openrouter_model}): {type(openrouter_llm)}")
-        else:
-            print(f"  Failed to initialize Default OpenRouter LLM ({default_openrouter_model}). Check OPENROUTER_API_KEY in .env")
-    else:
-            print("  No default OpenRouter model configured in .env")
-
-
-    print("\n--- Testing with specific model names from .env (if available) ---")
-    google_models_list = get_available_models('google')
-    if len(google_models_list) > 1:
-        specific_google = google_models_list[1] # Try second model in the list
-        print(f"\nTesting specific Google model: {specific_google}")
-        gemini_specific = get_llm_instance("google", model_name=specific_google)
-        if gemini_specific:
-             print(f"  Successfully initialized specific Google model: {specific_google}")
-        else:
-             print(f"  Failed to initialize specific Google model: {specific_google}")
-
-    ollama_models_list = get_available_models('ollama')
-    if len(ollama_models_list) > 1:
-        specific_ollama = ollama_models_list[1] # Try second model in the list
-        print(f"\nTesting specific Ollama model: {specific_ollama}")
-        ollama_specific = get_llm_instance("ollama", model_name=specific_ollama)
-        if ollama_specific:
-             print(f"  Successfully initialized specific Ollama model: {ollama_specific.model}")
-        else:
-             print(f"  Failed to initialize specific Ollama model: {specific_ollama}")
-
-    openrouter_models_list = get_available_models('openrouter')
-    if len(openrouter_models_list) > 1:
-        specific_openrouter = openrouter_models_list[1] # Try second model in the list
-        print(f"\nTesting specific OpenRouter model: {specific_openrouter}")
-        openrouter_specific = get_llm_instance("openrouter", model_name=specific_openrouter)
-        if openrouter_specific:
-             print(f"  Successfully initialized specific OpenRouter model: {specific_openrouter}")
-        else:
-             print(f"  Failed to initialize specific OpenRouter model: {specific_openrouter}")
+        logging.error(f"Unsupported provider: {provider}")
+        return None
