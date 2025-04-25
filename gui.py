@@ -151,7 +151,7 @@ class AbridgerWindow(QMainWindow):
         model_group.setLayout(model_layout)
 
         self.provider_combo = QComboBox()
-        self.provider_combo.addItems(["google", "ollama"]) # Add more if needed
+        self.provider_combo.addItems(["google", "ollama", "openrouter"]) # Add openrouter
         self.provider_combo.currentTextChanged.connect(self.update_model_defaults) # Update model list/default
 
         self.model_combo = QComboBox()

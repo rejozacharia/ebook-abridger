@@ -31,3 +31,6 @@ test_output/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Log files
+abridger_engine.log

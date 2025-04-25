@@ -13,7 +13,9 @@ from llm_config import get_default_model # Import new function
 
 # Configure logging
 # Set level to INFO, could be made configurable via args later
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(module)s] %(message)s')
+import os
+print("Working directory:", os.getcwd())
+logging.basicConfig(filename='abridger_engine.log',level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(module)s] %(message)s', force=True)
 
 # Pass args explicitly to confirm_proceed to access model info
 def confirm_proceed(args, estimated_tokens: dict, estimated_cost: float) -> bool:
@@ -165,7 +167,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-p", "--provider",
-        choices=["google", "ollama"],
+        choices=["google", "ollama", "openrouter"], # Add openrouter
         required=True,
         help="The LLM provider to use."
     )

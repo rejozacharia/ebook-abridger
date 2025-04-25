@@ -50,8 +50,12 @@ def get_model_pricing(model_name: str) -> Dict[str, float]:
         return LLM_PRICING.get("gemini-2.5-pro", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
     if "gpt-4" in model_name.lower():
         return LLM_PRICING.get("gpt-4", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
-    if "llama" in model_name.lower():
+    if "llama" in model_name.lower(): # Assuming local Ollama Llama models are free
          return LLM_PRICING.get("llama4-scout", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
+    # Check for OpenRouter format (e.g., 'mistralai/mistral-7b-instruct')
+    if "/" in model_name:
+         logging.info(f"Assuming $0 estimated cost for OpenRouter model '{model_name}'. Actual costs vary.")
+         return {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0}
 
     logging.warning(f"Could not determine fallback pricing for '{model_name}'. Assuming $0 cost.")
     return {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0}
