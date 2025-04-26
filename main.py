@@ -110,7 +110,7 @@ def main(args):
         engine = SummarizationEngine(
             llm_provider=args.provider,
             llm_model_name=args.model, # Pass None if user didn't specify, engine uses default
-            temperature=args.temperature
+            temperature=args.temperature,
             chapter_word_limit=chapterwordlimit
             # chain_type can be added as arg later if needed
         )
