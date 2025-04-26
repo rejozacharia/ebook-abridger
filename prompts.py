@@ -1,35 +1,77 @@
+import os
+import yaml
 from langchain_core.prompts import PromptTemplate
+
+# ─── load our app config ──────────────────────────────────────────────────────
+CFG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(CFG_PATH, 'r') as f:
+    _CFG = yaml.safe_load(f)
+
+LENGTH_MAP = _CFG["chapter_summary_lengths"]
+DEFAULT_LENGTH = _CFG.get("default_summary_length", "short")
+
 
 # --- Map Prompt Template ---
 # This prompt is applied to each chapter individually.
 
-map_template_string = """
-You are an expert literary assistant tasked with creating an engaging abridged version of a book chapter.
-Your goal is to significantly shorten the chapter while preserving its essence, narrative flow, key information, and unique character.
+def get_map_prompt(summary_length_key: str | None = None) -> PromptTemplate:
+    """
+    Returns the PromptTemplate for per-chapter summarization, 
+    using the configured reduction percentage.
+    """
+    key = summary_length_key or DEFAULT_LENGTH
+    reduction = LENGTH_MAP.get(key, LENGTH_MAP[DEFAULT_LENGTH])
 
-**Instructions:**
+    template = f"""
+    You are an expert literary assistant tasked with creating an engaging abridged version of a book chapter.
 
-1.  **Summarize Concisely:** Reduce the chapter text to approximately 10-15% of its original length. Focus on the most crucial plot points, character developments, and thematic elements.
-2.  **Preserve Key Elements:** Retain important dialogue, memorable anecdotes, significant descriptions, and critical events. Do not over-summarize to the point of losing the chapter's flavor or core message.
-3.  **Maintain Narrative Voice:** The abridged version should reflect the original author's tone, style, and narrative perspective.
-4.  **Ensure Clarity and Flow:** The resulting text must be coherent, readable, and flow logically.
-5.  **Focus on this Chapter:** Primarily summarize the content provided below. While context from the overall book is useful, your main task here is to abridge *this specific chapter*.
+    **Instructions:**
 
-**Input Chapter Text:**
-```text
-{text}
-```
+    1.  **Summarize Concisely:** Reduce the chapter text to approximately {reduction} of its original length. Focus on the most crucial plot points, character developments, and thematic elements.
+    2.  **Preserve Key Elements:** Retain important dialogue, memorable anecdotes, significant descriptions, and critical events.
+    3.  **Maintain Narrative Voice:** The abridged version should reflect the original author's tone and style.
+    4.  **Ensure Clarity and Flow:** The resulting text must be coherent and readable.
+    5.  **Focus on this Chapter:** Primarily summarize *this specific chapter*.
 
-**Output:**
-Provide the abridged version of the chapter based on the instructions above. Output only the abridged text, without any introductory phrases like "Here is the abridged version:".
+    **Input Chapter Text:**
+    ```text
+    {{text}}
+    ```
 
-**Abridged Chapter:**
-"""
+    **Output:**
+    Provide the abridged version of the chapter based on the instructions above. Output only the abridged text, without any introductory phrases like "Here is the abridged version:".
 
-MAP_PROMPT = PromptTemplate(
-    template=map_template_string,
-    input_variables=["text"]
-)
+    **Abridged Chapter:**
+    """
+    return PromptTemplate(template=template, input_variables=["text"])
+
+# map_template_string = """
+# You are an expert literary assistant tasked with creating an engaging abridged version of a book chapter.
+# Your goal is to shorten the chapter while preserving its essence, narrative flow and style, key information, and unique character.
+
+# **Instructions:**
+
+# 1.  **Summarize Concisely:** Reduce the chapter text to approximately {reduction_text} of its original length. Focus on the most crucial plot points, character developments, and thematic elements.
+# 2.  **Preserve Key Elements:** Retain important dialogue, memorable anecdotes, significant descriptions, and critical events. Do not over-summarize to the point of losing the chapter's flavor or core message.
+# 3.  **Maintain Narrative Voice:** The abridged version should reflect the original author's tone, style, and narrative perspective.
+# 4.  **Ensure Clarity and Flow:** The resulting text must be coherent, readable, and flow logically.
+# 5.  **Focus on this Chapter:** Primarily summarize the content provided below. While context from the overall book is useful, your main task here is to abridge *this specific chapter*.
+
+# **Input Chapter Text:**
+# ```text
+# {text}
+# ```
+
+# **Output:**
+# Provide the abridged version of the chapter based on the instructions above. Output only the abridged text, without any introductory phrases like "Here is the abridged version:".
+
+# **Abridged Chapter:**
+# """
+
+# MAP_PROMPT = PromptTemplate(
+#     template=map_template_string,
+#     input_variables=["text"]
+# )
 
 
 # --- Combine Prompt Template ---
@@ -75,7 +117,7 @@ Your goal is to provide a high-level overview of the book's main plot, themes, a
 
 1.  **Identify Core Narrative:** Read through the provided chapter summaries and identify the main storyline, key characters, central conflicts, and major turning points.
 2.  **Extract Key Themes:** Determine the primary themes or messages conveyed throughout the summaries.
-3.  **Synthesize Concisely:** Write a brief, coherent summary (e.g., 2-4 paragraphs) that captures the essence of the book as represented by the chapter summaries. Focus on the overall picture, not granular chapter details.
+3.  **Synthesize Concisely:** Write a brief, coherent summary (e.g., 4-6 paragraphs) that captures the essence of the book as represented by the chapter summaries. Focus on the overall picture, not granular chapter details.
 4.  **Maintain Neutral Tone:** Present the summary objectively.
 5.  **Final Output:** Produce only the final book summary text, without any introductory phrases like "Here is the book summary:".
 
@@ -95,14 +137,3 @@ OVERALL_SUMMARY_PROMPT = PromptTemplate(
     input_variables=["text"]
 )
 
-
-# Example usage (for testing purposes)
-if __name__ == '__main__':
-    print("--- Map Prompt Template ---")
-    print(MAP_PROMPT.format(text="This is a sample chapter text."))
-
-    print("\n--- Combine Prompt Template ---")
-    print(COMBINE_PROMPT.format(text="Summary of chapter 1.\nSummary of chapter 2."))
-
-    print("\n--- Overall Summary Prompt Template ---")
-    print(OVERALL_SUMMARY_PROMPT.format(text="Chapter 1 summary text.\n\nChapter 2 summary text."))

@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 
 from llm_config import get_llm_instance
-from prompts import MAP_PROMPT, OVERALL_SUMMARY_PROMPT
+from prompts import get_map_prompt, OVERALL_SUMMARY_PROMPT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -57,8 +57,7 @@ class SummarizationEngine:
                 logging.info(f"Chapter {num} is short ({word_count} words); skipping summarization.")
                 self.skipped_chapters.append((num, title, word_count))  # <--- Add to skipped list
                 return chapter_doc.page_content.strip()
-
-            prompt_text = MAP_PROMPT.format(text=chapter_doc.page_content)
+            prompt_text = get_map_prompt().format(text=chapter_doc.page_content)
             response = self.llm.invoke([HumanMessage(content=prompt_text)])
             if hasattr(response, 'generations'):
                 chapter_summary = response.generations[0][0].text.strip()

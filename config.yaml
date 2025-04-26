@@ -5,6 +5,14 @@ defaults:
   short_chapter_word_limit: 150
   chain_type: "map_reduce"
 
+chapter_summary_lengths:
+  very_short: "10-15%"
+  short: "20-25%"
+  medium: "35-50%"
+  long: "50-75%"
+
+default_chapter_summary_length: "short"  # or 'medium', etc.
+
 models:
   google:
     default: "gemini-2.0-flash"
