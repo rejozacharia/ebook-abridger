@@ -18,14 +18,17 @@ class SummarizationEngine:
         llm_provider: str,
         llm_model_name: Optional[str] = None,
         temperature: float = 0.3,
-        chapter_word_limit:  int = 150  # chapters below this limit are not summarized but passed through
+        short_chapter_word_limit:  int = 150,  # chapters below this limit are not summarized but passed through
+        summary_length_key: Optional[str] = "short"
     ):
         self.llm_provider = llm_provider
         self.llm_model_name = llm_model_name
         self.temperature = temperature
-        self.chapter_word_limit = chapter_word_limit
+        self.short_chapter_word_limit = short_chapter_word_limit
+        self.summary_length_key = summary_length_key
         self.llm = None
         self.skipped_chapters = []  # <--- Track skipped chapters
+        self.error_chapters: List[tuple[int,str,Exception]] = [] # Track errored chapters
         self._initialize_llm()
 
     def _initialize_llm(self):
@@ -53,11 +56,14 @@ class SummarizationEngine:
         title = chapter_doc.metadata.get('chapter_title', 'Unknown')
         try:
             word_count = len(chapter_doc.page_content.split())
-            if word_count < self.chapter_word_limit:
+            if word_count < self.short_chapter_word_limit:
                 logging.info(f"Chapter {num} is short ({word_count} words); skipping summarization.")
                 self.skipped_chapters.append((num, title, word_count))  # <--- Add to skipped list
                 return chapter_doc.page_content.strip()
-            prompt_text = get_map_prompt().format(text=chapter_doc.page_content)
+            # use the user-selected length key to build our prompt
+            prompt_template = get_map_prompt(self.summary_length_key)
+            prompt_text = prompt_template.format(text=chapter_doc.page_content)
+
             response = self.llm.invoke([HumanMessage(content=prompt_text)])
             if hasattr(response, 'generations'):
                 chapter_summary = response.generations[0][0].text.strip()
@@ -72,6 +78,7 @@ class SummarizationEngine:
             return chapter_summary
         except Exception as e:
             logging.error(f"Error summarizing Chapter {num} ('{title}'): {e}", exc_info=True)
+            self.error_chapters.append((num, title, e))
             return f"[Error summarizing chapter {num}]"
 
 
@@ -98,10 +105,17 @@ class SummarizationEngine:
             summaries.append(summary)
         logging.info("Chapter-by-chapter abridgment completed.")
         # Log skipped chapters
+
+        logging.info("Chapter-by-chapter abridgment completed.")
         if self.skipped_chapters:
-            logging.info(f"Skipped summarizing {len(self.skipped_chapters)} chapters because they were short:")
-            for num, title, words in self.skipped_chapters:
-                logging.info(f"  - Chapter {num}: '{title}' ({words} words)")
+            logging.info(f"Skipped {len(self.skipped_chapters)} chapters (below {self.short_chapter_word_limit} words):")
+            for num, title, wc in self.skipped_chapters:
+                logging.info(f"  • Chapter {num}: '{title}' ({wc} words)")
+        if self.error_chapters:
+            logging.warning(f"{len(self.error_chapters)} chapters failed to summarize due to errors:")
+            for num, title, err in self.error_chapters:
+                logging.warning(f"  • Chapter {num}: '{title}' – {err}")
+
 
         return summaries
 

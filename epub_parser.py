@@ -144,7 +144,7 @@ def parse_epub(file_path: str) -> tuple[list[Document], dict]:
 
                 logical_count += 1
                 chapter_number = logical_count
-                chapter_title  = title_text or f"Chapter {chapter_number}"
+                chapter_title  = title_text #or f"Chapter {chapter_number}"
 
                 # Token counting
                 token_count = count_tokens(text_content, model_name="gpt-4")

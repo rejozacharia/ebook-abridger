@@ -1,7 +1,9 @@
 {
   "provider": "google",
   "model": "gemma-3-27b-it",
-  "temperature": 0.3,
+  "temperature": 0.6,
   "skip_estimation": false,
-  "short_chapter_word_limit": 150
+  "short_chapter_word_limit": 160,
+  "summary_length_key": "very_short",
+  "chapter_word_limit": 150
 }
