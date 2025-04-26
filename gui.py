@@ -65,33 +65,35 @@ class WorkerThread(QThread):
             else:
                 self.progress_update.emit(5, "Skipping estimation...")
 
-            # Stage 3: Summarization
-            self.progress_update.emit(10, "Starting chapter summaries...")
+            # # Stage 3: Summarization
+            self.progress_update.emit(25, "Starting chapter summaries...")
             engine = SummarizationEngine(
                 llm_provider=self.provider,
                 llm_model_name=self.model,
-                temperature=self.temperature
+                temperature=self.temperature,
+                chapter_word_limit=150
             )
             chapter_summaries = engine.abridge_documents(chapters)
             total = len(chapter_summaries)
             for idx, _ in enumerate(chapter_summaries, start=1):
                 pct = 10 + int((idx / total) * 80)
                 self.progress_update.emit(pct, f"Chapter {idx}/{total} summarized")
-            self.progress_update.emit(90, "Chapters summarized.")
+            self.progress_update.emit(85, "Chapters summarized.")
 
-            # Stage 4: Overall summary
-            self.progress_update.emit(90, "Generating overall summary...")
-            overall = engine.summarize_book_overall(chapter_summaries)
+            # # Stage 4: Overall summary
+            self.progress_update.emit(85, "Generating overall summary...")
+            overall_summary = engine.summarize_book_overall(chapter_summaries)
             self.progress_update.emit(95, "Overall summary done.")
 
-            # Stage 5: Build EPUB
+            # # Stage 5: Build EPUB
             self.progress_update.emit(95, "Building EPUB...")
             original_book = ebooklib.epub.read_epub(self.input_path)
             success = build_epub(
                 chapter_summaries=chapter_summaries,
-                overall_summary=overall,
+                overall_summary=overall_summary,
                 parsed_docs=chapters,
-                original_book=original_book,
+                original_book=original_book,  # still needed for spine
+                epub_metadata=metadata,    
                 output_path=self.output_path
             )
             if not success:

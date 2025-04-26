@@ -1,0 +1,38 @@
+# config.yaml
+
+defaults:
+  temperature: 0.3
+  short_chapter_word_limit: 150
+  chain_type: "map_reduce"
+
+models:
+  google:
+    default: "gemini-2.0-flash"
+    available:
+      - "gemma-3-27b-it"
+      - "gemini-2.0-flash"
+      - "gemini-1.5-flash"
+      - "gemini-1.5-pro"
+  openrouter:
+    default: "mistralai/mistral-7b-instruct"
+    available:
+      - "mistralai/mistral-7b-instruct"
+      - "google/gemini-flash-1.5"
+      - "anthropic/claude-3-haiku"
+  ollama:
+    default: "llama3"
+    available:
+      - "llama3"
+      - "mistral"
+      - "phi3"
+
+pricing:
+  gemini-2.0-flash:
+    input_cost_per_million_tokens: 0.1
+    output_cost_per_million_tokens: 0.4
+  gpt-4:
+    input_cost_per_million_tokens: 10.0
+    output_cost_per_million_tokens: 30.0
+  llama3:
+    input_cost_per_million_tokens: 0.0
+    output_cost_per_million_tokens: 0.0

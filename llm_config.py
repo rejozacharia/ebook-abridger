@@ -1,7 +1,10 @@
 import os
 import logging
 from dotenv import load_dotenv
+from typing import Optional
+
 from pydantic import Field, SecretStr
+import yaml
 
 # --- External LLM clients ---
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -12,24 +15,43 @@ from langchain_core.utils.utils import secret_from_env
 # --- Logging setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Load .env ---
+# --- Load .env for secrets ---
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path=dotenv_path)
     logging.info(f"Loaded environment variables from: {dotenv_path}")
 else:
-    logging.warning(f".env file not found at expected location: {dotenv_path}.")
+    logging.warning(f".env not found at {dotenv_path}; loading from system env")
     load_dotenv()
 
-# --- Constants ---
-DEFAULT_TEMPERATURE = 0.3
+# --- Load config.yaml for non‐sensitive defaults ---
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+if not os.path.exists(CONFIG_PATH):
+    raise FileNotFoundError(f"config.yaml not found at {CONFIG_PATH}")
+with open(CONFIG_PATH, 'r') as f:
+    _CONFIG = yaml.safe_load(f)
 
-# --- OpenRouter subclass of ChatOpenAI ---
+# --- Pull defaults/models/pricing from YAML ---
+_DEFAULTS = _CONFIG.get("defaults", {})
+MODELS    = _CONFIG.get("models", {})
+
+DEFAULT_TEMPERATURE           = _DEFAULTS.get("temperature", 0.3)
+SHORT_CHAPTER_WORD_LIMIT      = _DEFAULTS.get("short_chapter_word_limit", 150)
+DEFAULT_CHAIN_TYPE            = _DEFAULTS.get("chain_type", "map_reduce")
+
+# --- Helper to read model lists from config.yaml ---
+def get_available_models(provider: str) -> list[str]:
+    """Return the list of available model names for a given provider."""
+    prov = provider.lower()
+    return MODELS.get(prov, {}).get("available", [])
+
+def get_default_model(provider: str) -> Optional[str]:
+    """Return the default model for a given provider."""
+    prov = provider.lower()
+    return MODELS.get(prov, {}).get("default")
+
+# --- OpenRouter subclass of ChatOpenAI (unchanged) ---
 class ChatOpenRouter(ChatOpenAI):
-    """
-    Treat OpenRouter.ai as an OpenAI-compatible endpoint.
-    Reads OPENROUTER_API_KEY and OPENAI_API_BASE from env.
-    """
     openai_api_key: SecretStr = Field(
         alias="api_key",
         default_factory=secret_from_env("OPENROUTER_API_KEY", default=None),
@@ -37,70 +59,9 @@ class ChatOpenRouter(ChatOpenAI):
 
     @property
     def lc_secrets(self) -> dict[str, str]:
-        # ensure the secret is mapped correctly for runtime
         return {"openai_api_key": "OPENROUTER_API_KEY"}
 
-
-# --- Model config parsing ---
-_MODEL_CONFIG: dict[str, dict[str, list[str] | str | None]] = {}
-
-def _parse_models_from_env(env_var_name: str) -> tuple[list[str], str | None]:
-    models_str = os.getenv(env_var_name, "")
-    if not models_str:
-        return [], None
-
-    models = []
-    default = None
-    for token in models_str.split(','):
-        m = token.strip()
-        if m.endswith('*'):
-            name = m[:-1]
-            default = default or name
-            models.append(name)
-        else:
-            models.append(m)
-    if not default and models:
-        default = models[0]
-    return models, default
-
-def _load_model_config() -> None:
-    global _MODEL_CONFIG
-    if _MODEL_CONFIG:
-        return
-
-    google_models, google_def = _parse_models_from_env("GOOGLE_MODELS")
-    ollama_models, ollama_def = _parse_models_from_env("OLLAMA_MODELS")
-    openr_models, openr_def = _parse_models_from_env("OPENROUTER_MODELS")
-
-    _MODEL_CONFIG = {
-        "google":  {"models": google_models,   "default": google_def},
-        "ollama":  {"models": ollama_models,   "default": ollama_def},
-        "openrouter": {"models": openr_models,  "default": openr_def},
-    }
-
-    # Fallback defaults
-    if not _MODEL_CONFIG["google"]["default"]:
-        _MODEL_CONFIG["google"]["default"] = "gemini-1.5-flash"
-        logging.warning("No default Google model in .env; using 'gemini-1.5-flash'.")
-    if not _MODEL_CONFIG["ollama"]["default"]:
-        _MODEL_CONFIG["ollama"]["default"] = "llama3"
-        logging.warning("No default Ollama model in .env; using 'llama3'.")
-    if not _MODEL_CONFIG["openrouter"]["default"]:
-        _MODEL_CONFIG["openrouter"]["default"] = "mistralai/mistral-7b-instruct"
-        logging.warning("No default OpenRouter model in .env; using 'mistralai/mistral-7b-instruct'.")
-
-# populate on import
-_load_model_config()
-
-def get_available_models(provider: str) -> list[str]:
-    return _MODEL_CONFIG.get(provider.lower(), {}).get("models", [])
-
-def get_default_model(provider: str) -> str | None:
-    return _MODEL_CONFIG.get(provider.lower(), {}).get("default")
-
-
-# --- LLM factories ---
-
+# --- LLM factories, now using defaults from config.yaml ---
 def get_google_genai_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -134,13 +95,7 @@ def get_ollama_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
         return None
 
 def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    """
-    Uses our ChatOpenRouter subclass to target OpenRouter.ai.
-    Requires in .env:
-      OPENROUTER_API_KEY=<your key>
-      OPENAI_API_BASE=https://openrouter.ai/api/v1
-    """
-    api_base = os.getenv("OPENAI_API_BASE")
+    api_base = os.getenv("OPENAI_API_BASE_URL")
     if not os.getenv("OPENROUTER_API_KEY"):
         logging.error("OPENROUTER_API_KEY missing; cannot init OpenRouter LLM.")
         return None
@@ -148,7 +103,7 @@ def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE
         llm = ChatOpenRouter(
             model_name,
             temperature=temperature,
-            openai_api_base=api_base  # passed through ChatOpenAI base
+            openai_api_base=api_base
         )
         logging.info(f"Initialized OpenRouter LLM: {model_name}")
         return llm
@@ -156,14 +111,19 @@ def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE
         logging.error(f"OpenRouter init error ({model_name}): {e}", exc_info=True)
         return None
 
-def get_llm_instance(provider: str, model_name: str = None, temperature: float = DEFAULT_TEMPERATURE):
+def get_llm_instance(
+    provider: str,
+    model_name: Optional[str] = None,
+    temperature: float = DEFAULT_TEMPERATURE
+):
     """
     Return an initialized LLM for 'google', 'ollama', or 'openrouter'.
+    Uses config.yaml to supply defaults if model_name is None.
     """
-    prov = provider.lower()
+    prov  = provider.lower()
     model = model_name or get_default_model(prov)
     if not model:
-        logging.error(f"No model given or default for provider '{prov}'.")
+        logging.error(f"No model specified or default for provider '{prov}'.")
         return None
 
     if prov == "google":

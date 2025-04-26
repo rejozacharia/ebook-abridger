@@ -166,5 +166,3 @@ See `requirements.txt` for a full list of Python dependencies. Key libraries inc
 *   Explore parallel execution for the map step in the summarization chain.
 *   Refine prompts for better quality and adherence to length constraints.
 *   Improve cost estimation accuracy, especially for different chain types.
-*   Allow splitting the abridged output into multiple chapters instead of one large chapter.
-*   Add more configuration options to the GUI (e.g., temperature).

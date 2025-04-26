@@ -62,11 +62,11 @@ def main(args):
     # 1. Parse EPUB
     logging.info("Parsing EPUB file...")
     try:
-        chapter_docs, metadata = parse_epub(args.input_epub)
-        if not chapter_docs:
+        chapters, metadata = parse_epub(args.input_epub)
+        if not chapters:
             logging.error("Failed to parse any chapters from the EPUB. Exiting.")
             sys.exit(1)
-        logging.info(f"Parsed {len(chapter_docs)} chapters from '{metadata.get('title', 'Unknown Title')}'.")
+        logging.info(f"Parsed {len(chapters)} chapters from '{metadata.get('title', 'Unknown Title')}'.")
     except FileNotFoundError:
         logging.error(f"Input EPUB file not found: {args.input_epub}")
         sys.exit(1)
@@ -85,7 +85,7 @@ def main(args):
          sys.exit(1)
               
     try:
-        token_estimates, cost_estimate = estimate_abridgment_cost(chapter_docs, estimation_model_name)
+        token_estimates, cost_estimate = estimate_abridgment_cost(chapters, estimation_model_name)
     except Exception as e:
         logging.error(f"An unexpected error occurred during cost estimation: {e}", exc_info=True)
         sys.exit(1) # Exit if estimation fails
@@ -111,6 +111,7 @@ def main(args):
             llm_provider=args.provider,
             llm_model_name=args.model, # Pass None if user didn't specify, engine uses default
             temperature=args.temperature
+            chapter_word_limit=chapterwordlimit
             # chain_type can be added as arg later if needed
         )
         # Check only for LLM initialization now, chain is not used directly here
@@ -121,13 +122,11 @@ def main(args):
         logging.error(f"An unexpected error occurred during summarization engine initialization: {e}", exc_info=True)
         sys.exit(1)
 
-
-    # 5. Summarize / Abridge
     # 5. Summarize Chapters
     logging.info("Starting chapter summarization...")
     chapter_summaries: Optional[List[str]] = None
     try:
-        chapter_summaries = engine.abridge_documents(chapter_docs)
+        chapter_summaries = engine.abridge_documents(chapters)
         if chapter_summaries is None:
             logging.error("Chapter summarization process failed. Check logs.")
             sys.exit(1)
@@ -170,8 +169,9 @@ def main(args):
         success = build_epub(
             chapter_summaries=chapter_summaries,
             overall_summary=overall_summary,
-            parsed_docs=chapter_docs, # Pass the parsed documents
-            original_book=original_book,
+            parsed_docs=chapters,
+            original_book=original_book,  # still needed for spine
+            epub_metadata=metadata,    
             output_path=args.output_epub
         )
         if not success:
@@ -209,6 +209,12 @@ if __name__ == "__main__":
         type=float,
         default=0.3,
         help="Sampling temperature for the LLM (default: 0.3)."
+    )
+    parser.add_argument(
+        "-w", "--chapterwordlimit",
+        type=int,
+        default=150,
+        help="Chapter word limit (default: 150) below which summarization is skipped."
     )
     parser.add_argument(
         "-y", "--yes",

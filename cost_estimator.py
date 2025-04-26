@@ -2,34 +2,10 @@ import logging
 from typing import List, Dict, Tuple
 from langchain_core.documents import Document
 from utils import count_tokens # Use absolute import
+from config_loader import load_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# --- Placeholder Pricing ---
-# Prices are typically per 1 million tokens (input/output)
-# These are illustrative and may not be accurate. Replace with actual pricing.
-# Example: Gemini 2.5 Pro might have different pricing tiers.
-# Example: Llama 4 (if run locally via Ollama) might have $0 API cost, but compute cost.
-LLM_PRICING = {
-    "gemini-2.5-pro-exp-03-25": { # Specific experimental model
-        "input_cost_per_million_tokens": 0.00, # USD (Free tier)
-        "output_cost_per_million_tokens": 0.00  # USD (Free tier)
-    },
-    "gemini-2.5-pro": { # Hypothetical pricing for standard Gemini 2.5 Pro
-        "input_cost_per_million_tokens": 2.00, # USD
-        "output_cost_per_million_tokens": 6.00  # USD
-    },
-    "gpt-4": { # Example pricing
-        "input_cost_per_million_tokens": 10.00, # USD
-        "output_cost_per_million_tokens": 30.00  # USD
-    },
-    "llama4-scout": { # Assuming local execution via Ollama
-         "input_cost_per_million_tokens": 0.00,
-         "output_cost_per_million_tokens": 0.00
-    },
-    # Add other models as needed
-}
 
 # --- Heuristics ---
 # Factor to estimate output tokens based on input for the map phase (abridgment target)
@@ -37,29 +13,11 @@ MAP_OUTPUT_FACTOR = 0.15 # Estimate 15% length for safety margin over 10% target
 # Factor to estimate combine phase tokens based on the *output* of the map phase
 COMBINE_FACTOR = 0.5 # Estimate combine phase uses tokens ~50% of the map output size
 
+config = load_config("config.yaml")
+PRICING = config["pricing"]
+
 def get_model_pricing(model_name: str) -> Dict[str, float]:
-    """Retrieves pricing information for a given model name."""
-    # Try to find the exact model name
-    pricing = LLM_PRICING.get(model_name)
-    if pricing:
-        return pricing
-    
-    # Basic fallback logic (e.g., if model name includes 'gemini', use gemini pricing)
-    logging.warning(f"Exact pricing for model '{model_name}' not found. Attempting fallback.")
-    if "gemini" in model_name.lower():
-        return LLM_PRICING.get("gemini-2.5-pro", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
-    if "gpt-4" in model_name.lower():
-        return LLM_PRICING.get("gpt-4", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
-    if "llama" in model_name.lower(): # Assuming local Ollama Llama models are free
-         return LLM_PRICING.get("llama4-scout", {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
-    # Check for OpenRouter format (e.g., 'mistralai/mistral-7b-instruct')
-    if "/" in model_name:
-         logging.info(f"Assuming $0 estimated cost for OpenRouter model '{model_name}'. Actual costs vary.")
-         return {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0}
-
-    logging.warning(f"Could not determine fallback pricing for '{model_name}'. Assuming $0 cost.")
-    return {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0}
-
+    return PRICING.get(model_name, {"input_cost_per_million_tokens": 0, "output_cost_per_million_tokens": 0})
 
 def estimate_abridgment_cost(
     chapter_docs: List[Document],

@@ -17,12 +17,15 @@ class SummarizationEngine:
         self,
         llm_provider: str,
         llm_model_name: Optional[str] = None,
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        chapter_word_limit:  int = 150  # chapters below this limit are not summarized but passed through
     ):
         self.llm_provider = llm_provider
         self.llm_model_name = llm_model_name
         self.temperature = temperature
+        self.chapter_word_limit = chapter_word_limit
         self.llm = None
+        self.skipped_chapters = []  # <--- Track skipped chapters
         self._initialize_llm()
 
     def _initialize_llm(self):
@@ -38,20 +41,25 @@ class SummarizationEngine:
         except Exception as e:
             logging.error(f"Error initializing LLM: {e}", exc_info=True)
             self.llm = None
-
+    
     def summarize_single_chapter(self, chapter_doc: Document) -> str:
         """
-        Summarize one chapter, extracting only the raw text.
+        Summarize one chapter, or pass through short chapters unchanged.
         """
         if not self.llm:
             logging.error("LLM not initialized. Cannot summarize chapter.")
             return ""
         num = chapter_doc.metadata.get('chapter_number', '?')
+        title = chapter_doc.metadata.get('chapter_title', 'Unknown')
         try:
+            word_count = len(chapter_doc.page_content.split())
+            if word_count < self.chapter_word_limit:
+                logging.info(f"Chapter {num} is short ({word_count} words); skipping summarization.")
+                self.skipped_chapters.append((num, title, word_count))  # <--- Add to skipped list
+                return chapter_doc.page_content.strip()
+
             prompt_text = MAP_PROMPT.format(text=chapter_doc.page_content)
-            # Invoke the LLM
             response = self.llm.invoke([HumanMessage(content=prompt_text)])
-            # Extract generated text
             if hasattr(response, 'generations'):
                 chapter_summary = response.generations[0][0].text.strip()
             elif hasattr(response, 'content'):
@@ -64,9 +72,10 @@ class SummarizationEngine:
                 logging.info(f"Chapter {num} summary generated (first100 chars): {chapter_summary[:100]}...")
             return chapter_summary
         except Exception as e:
-            title = chapter_doc.metadata.get('chapter_title', 'Unknown')
             logging.error(f"Error summarizing Chapter {num} ('{title}'): {e}", exc_info=True)
             return f"[Error summarizing chapter {num}]"
+
+
 
     def abridge_documents(self, chapter_docs: List[Document]) -> List[str]:
         """
@@ -89,6 +98,12 @@ class SummarizationEngine:
             summary = self.summarize_single_chapter(doc)
             summaries.append(summary)
         logging.info("Chapter-by-chapter abridgment completed.")
+        # Log skipped chapters
+        if self.skipped_chapters:
+            logging.info(f"Skipped summarizing {len(self.skipped_chapters)} chapters because they were short:")
+            for num, title, words in self.skipped_chapters:
+                logging.info(f"  - Chapter {num}: '{title}' ({words} words)")
+
         return summaries
 
     def summarize_book_overall(self, chapter_summaries: List[str]) -> str:
@@ -123,4 +138,3 @@ class SummarizationEngine:
             logging.error(f"Error generating overall summary: {e}", exc_info=True)
             return ""
 
-# Example test removed for brevity
