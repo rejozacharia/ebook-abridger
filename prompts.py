@@ -63,6 +63,39 @@ COMBINE_PROMPT = PromptTemplate(
     input_variables=["text"]
 )
 
+
+# --- Overall Book Summary Prompt Template ---
+# This prompt takes the concatenated chapter summaries and creates a final book summary.
+
+overall_summary_template_string = """
+You are an expert literary critic tasked with writing a concise summary of a book based on its chapter summaries.
+Your goal is to provide a high-level overview of the book's main plot, themes, and conclusions.
+
+**Instructions:**
+
+1.  **Identify Core Narrative:** Read through the provided chapter summaries and identify the main storyline, key characters, central conflicts, and major turning points.
+2.  **Extract Key Themes:** Determine the primary themes or messages conveyed throughout the summaries.
+3.  **Synthesize Concisely:** Write a brief, coherent summary (e.g., 2-4 paragraphs) that captures the essence of the book as represented by the chapter summaries. Focus on the overall picture, not granular chapter details.
+4.  **Maintain Neutral Tone:** Present the summary objectively.
+5.  **Final Output:** Produce only the final book summary text, without any introductory phrases like "Here is the book summary:".
+
+**Input Chapter Summaries (Concatenated):**
+```text
+{text}
+```
+
+**Output:**
+Provide the overall book summary based on the instructions above.
+
+**Book Summary:**
+"""
+
+OVERALL_SUMMARY_PROMPT = PromptTemplate(
+    template=overall_summary_template_string,
+    input_variables=["text"]
+)
+
+
 # Example usage (for testing purposes)
 if __name__ == '__main__':
     print("--- Map Prompt Template ---")
@@ -70,3 +103,6 @@ if __name__ == '__main__':
 
     print("\n--- Combine Prompt Template ---")
     print(COMBINE_PROMPT.format(text="Summary of chapter 1.\nSummary of chapter 2."))
+
+    print("\n--- Overall Summary Prompt Template ---")
+    print(OVERALL_SUMMARY_PROMPT.format(text="Chapter 1 summary text.\n\nChapter 2 summary text."))

@@ -5,7 +5,7 @@ from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.messages import HumanMessage # For invoking chat models
 
 from llm_config import get_llm_instance # Use absolute import
-from prompts import MAP_PROMPT, COMBINE_PROMPT # Use absolute import
+from prompts import MAP_PROMPT, COMBINE_PROMPT, OVERALL_SUMMARY_PROMPT # Use absolute import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,23 +96,24 @@ class SummarizationEngine:
             return f"[Error summarizing chapter {chapter_num}]" # Return error placeholder
 
 
-    def abridge_documents(self, chapter_docs: List[Document]) -> Optional[str]:
+    def abridge_documents(self, chapter_docs: List[Document]) -> Optional[List[str]]:
         """
-        Runs the summarization chain on the provided chapter documents.
+        Summarizes each chapter document individually.
 
         Args:
             chapter_docs: A list of LangChain Document objects representing the chapters.
 
         Returns:
-            The final abridged text as a string, or None if an error occurs or
-            the engine wasn't initialized properly.
+            A list of strings, where each string is the summary of the corresponding chapter,
+            or None if the LLM initialization failed. Returns an empty list if input is empty.
+            Individual list items might contain error messages if a specific chapter failed.
         """
         if not self.llm:
             logging.error("LLM not initialized. Cannot abridge.")
             return None
         if not chapter_docs:
             logging.warning("No documents provided to abridge.")
-            return "" # Return empty string for empty input
+            return [] # Return empty list for empty input
 
         logging.info(f"Starting chapter-by-chapter abridgment for {len(chapter_docs)} documents...")
         all_chapter_summaries = []
@@ -130,11 +131,59 @@ class SummarizationEngine:
             # --- TODO: Add progress signal emission here for GUI ---
             # Example: self.progress_signal.emit(int((i + 1) / total_chapters * 100))
 
-        # Combine chapter summaries (simple concatenation with double newline)
-        final_text = "\n\n".join(all_chapter_summaries)
         logging.info("Chapter-by-chapter abridgment process completed.")
-        logging.info(f"Final Combined Summary (first 500 chars): {final_text[:500]}...")
-        return final_text
+        return all_chapter_summaries # Return the list of summaries
+
+    def summarize_book_overall(self, chapter_summaries: List[str]) -> Optional[str]:
+        """
+        Generates an overall summary of the book based on chapter summaries.
+
+        Args:
+            chapter_summaries: A list of strings containing the summaries of each chapter.
+
+        Returns:
+            A string containing the overall book summary, or None if an error occurs.
+        """
+        if not self.llm:
+            logging.error("LLM not initialized. Cannot generate overall summary.")
+            return None
+        if not chapter_summaries:
+            logging.warning("No chapter summaries provided for overall summary.")
+            return ""
+
+        logging.info("Generating overall book summary...")
+        # Combine chapter summaries into a single text block for the prompt
+        combined_summaries_text = "\n\n---\n\n".join(
+            f"Chapter {i+1} Summary:\n{summary}"
+            for i, summary in enumerate(chapter_summaries)
+            if not summary.startswith("[Error summarizing chapter") # Exclude error placeholders
+        )
+
+        if not combined_summaries_text:
+             logging.error("No valid chapter summaries available to generate an overall summary.")
+             return "[Could not generate overall summary - no valid chapter summaries]"
+
+
+        try:
+            prompt_text = OVERALL_SUMMARY_PROMPT.format(text=combined_summaries_text)
+            response = self.llm.invoke([HumanMessage(content=prompt_text)])
+
+            if hasattr(response, 'content'):
+                overall_summary = response.content.strip()
+            else:
+                overall_summary = str(response).strip()
+
+            if not overall_summary:
+                 logging.warning("Overall book summary generation resulted in empty text.")
+                 return ""
+            else:
+                 logging.info(f"Overall book summary generated (first 500 chars): {overall_summary[:500]}...")
+                 return overall_summary
+
+        except Exception as e:
+            logging.error(f"Error generating overall book summary: {e}", exc_info=True)
+            return "[Error generating overall book summary]"
+
 
 # Example usage (for testing purposes)
 if __name__ == '__main__':
@@ -152,16 +201,27 @@ if __name__ == '__main__':
     try:
         # Assuming Ollama runs locally and has 'llama3' model available
         ollama_engine = SummarizationEngine(llm_provider="ollama", llm_model_name="llama3")
-        if ollama_engine.chain:
-            abridged_text_ollama = ollama_engine.abridge_documents(dummy_docs)
-            if abridged_text_ollama:
-                print("\n--- Ollama Abridged Output ---")
-                print(abridged_text_ollama)
+        if ollama_engine.llm: # Check if LLM initialized
+            chapter_summaries_ollama = ollama_engine.abridge_documents(dummy_docs)
+            if chapter_summaries_ollama is not None:
+                print("\n--- Ollama Chapter Summaries ---")
+                for i, summary in enumerate(chapter_summaries_ollama):
+                     print(f"Chapter {i+1}: {summary[:100]}...")
                 print("-----------------------------")
+
+                # Test overall summary
+                overall_summary_ollama = ollama_engine.summarize_book_overall(chapter_summaries_ollama)
+                if overall_summary_ollama:
+                     print("\n--- Ollama Overall Summary ---")
+                     print(overall_summary_ollama)
+                     print("-----------------------------")
+                else:
+                     print("  Ollama overall summary generation failed.")
+
             else:
-                print("  Ollama abridgment failed.")
+                print("  Ollama chapter abridgment failed.")
         else:
-            print("  Could not initialize Ollama engine/chain. Is Ollama running?")
+            print("  Could not initialize Ollama LLM. Is Ollama running?")
     except Exception as e:
         print(f"  Error during Ollama test: {e}")
 

@@ -1,12 +1,13 @@
 import sys
 import logging
 import os
+import ebooklib # Import ebooklib
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QComboBox, QTextEdit, QMessageBox,
     QProgressBar, QGroupBox, QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMutex, QWaitCondition
 
 # Backend function imports
 from epub_parser import parse_epub
@@ -35,6 +36,9 @@ class WorkerThread(QThread):
         self.provider = provider
         self.model = model
         self._is_running = True
+        self.mutex = QMutex()
+        self.wait_condition = QWaitCondition()
+        self._proceed_after_estimation = False # Flag to control continuation
 
     def run(self):
         """The main logic executed in the background thread."""
@@ -67,8 +71,16 @@ class WorkerThread(QThread):
             tokens, cost = estimate_abridgment_cost(chapters, estimation_model)
             self.estimation_complete.emit(tokens, cost)
 
-            # --- Wait for Confirmation (Handled by GUI interaction) ---
-            # The thread might pause here or the GUI handles the flow control
+            # --- Wait for Confirmation from GUI ---
+            self.mutex.lock()
+            logging.debug("Worker thread waiting for confirmation...")
+            self.wait_condition.wait(self.mutex) # Pause thread
+            logging.debug(f"Worker thread woken up. Proceed flag: {self._proceed_after_estimation}")
+            proceed = self._proceed_after_estimation
+            self.mutex.unlock()
+
+            if not proceed:
+                 raise InterruptedError("Abridgment cancelled by user after estimation.")
 
             # --- Stage 3: Abridgment (Chapter by Chapter) ---
             self.progress_update.emit(50, "Initializing LLM for abridgment...")
@@ -80,50 +92,45 @@ class WorkerThread(QThread):
             if not engine.llm:
                  raise ConnectionError("Failed to initialize LLM.")
 
-            all_chapter_summaries = []
-            total_chapters = len(chapters)
-            # Progress calculation: 50% to 90% allocated for summarization
-            summarization_progress_range = 40 # 90 - 50
+            # --- Stage 3a: Summarize Chapters ---
+            # Progress: 50% - 80%
+            self.progress_update.emit(50, "Summarizing chapters...")
+            # Note: engine.abridge_documents now returns List[str] or None
+            chapter_summaries = engine.abridge_documents(chapters)
+            if chapter_summaries is None:
+                 raise ValueError("Chapter summarization process failed (returned None).")
+            # Check if all summaries are error placeholders or empty
+            if all(s is None or s.startswith("[Error summarizing chapter") or not s for s in chapter_summaries):
+                 raise ValueError("All chapter summaries failed or were empty.")
+            self.progress_update.emit(80, "Chapter summarization finished.")
 
-            for i, doc in enumerate(chapters):
-                if not self._is_running: # Check for cancellation
-                     raise InterruptedError("Processing cancelled by user.")
+            # --- Stage 3b: Summarize Overall Book ---
+            # Progress: 80% - 90%
+            self.progress_update.emit(80, "Generating overall book summary...")
+            overall_summary = engine.summarize_book_overall(chapter_summaries)
+            if overall_summary is None or overall_summary.startswith("[Error generating overall"):
+                 logging.warning(f"Could not generate overall book summary: {overall_summary}")
+                 overall_summary = "" # Continue without summary chapter
+            self.progress_update.emit(90, "Overall summary finished.")
 
-                chapter_num = doc.metadata.get('chapter_number', i + 1)
-                chapter_title = doc.metadata.get('chapter_title', f'Chapter {chapter_num}')
-                # Calculate progress percentage within the summarization range
-                current_progress = 50 + int(((i + 1) / total_chapters) * summarization_progress_range)
-                self.progress_update.emit(current_progress, f"Abridging Chapter {chapter_num}/{total_chapters}: '{chapter_title[:30]}...'")
+            # --- Stage 4: Read Original Book Structure ---
+            # Progress: 90% - 95%
+            self.progress_update.emit(90, "Reading original EPUB structure...")
+            try:
+                 original_book = ebooklib.epub.read_epub(self.input_path)
+            except Exception as e:
+                 # Use specific IOError for file reading issues
+                 raise IOError(f"Failed to re-read original EPUB file {self.input_path}: {e}") from e
+            self.progress_update.emit(95, "Original structure read.")
 
-                # Call the engine's method to summarize the single chapter
-                chapter_summary = engine.summarize_single_chapter(doc)
-
-                # The summarize_single_chapter method handles logging and returns
-                # the summary string, an empty string for empty summaries,
-                # or an error placeholder string.
-                all_chapter_summaries.append(chapter_summary if chapter_summary is not None else f"[Error summarizing chapter {chapter_num}]")
-
-                # Emit error if the summary indicates an error occurred during processing
-                if chapter_summary is not None and chapter_summary.startswith("[Error summarizing chapter"):
-                     # Extract the specific error message if possible, or use the placeholder
-                     error_msg = chapter_summary
-                     self.error_occurred.emit(error_msg)
-                     # Continue processing other chapters for now
-
-            # Combine summaries
-            abridged_text = "\n\n".join(all_chapter_summaries)
-            if not abridged_text:
-                 # Check if the final combined text is empty (e.g., all chapters failed or were empty)
-                 raise ValueError("Abridgment resulted in empty final text.")
-            logging.info("Chapter-by-chapter abridgment process completed.")
-            self.progress_update.emit(90, "Abridgment finished.") # Mark end of summarization phase
-
-            # --- Stage 4: Building Output EPUB ---
-            self.progress_update.emit(90, "Building output EPUB...")
-            # Actual call to build_epub
+            # --- Stage 5: Building Output EPUB ---
+            # Progress: 95% - 100%
+            self.progress_update.emit(95, "Building output EPUB...")
             success = build_epub(
-                abridged_content=abridged_text,
-                original_metadata=metadata,
+                chapter_summaries=chapter_summaries,
+                overall_summary=overall_summary,
+                parsed_docs=chapters, # Pass the parsed documents list
+                original_book=original_book,
                 output_path=self.output_path
             )
             if not success:
@@ -135,9 +142,28 @@ class WorkerThread(QThread):
         except Exception as e:
             logging.error(f"Error in worker thread: {e}", exc_info=True)
             self.error_occurred.emit(str(e))
+        finally:
+             # Ensure mutex is unlocked if an exception occurs while locked (though unlikely here)
+             if self.mutex.tryLock(): # Check if locked without blocking
+                 self.mutex.unlock()
+
 
     def stop(self):
+        """Signals the thread to stop and wakes any waiting condition."""
+        logging.debug("Stop requested for worker thread.")
+        self.mutex.lock()
         self._is_running = False
+        self._proceed_after_estimation = False # Ensure it doesn't proceed if stopped while waiting
+        self.wait_condition.wakeAll() # Wake up if waiting
+        self.mutex.unlock()
+
+    def resume_after_estimation(self, proceed: bool):
+        """Sets the proceed flag and wakes the waiting thread."""
+        logging.debug(f"Resuming worker thread with proceed={proceed}")
+        self.mutex.lock()
+        self._proceed_after_estimation = proceed
+        self.wait_condition.wakeAll() # Wake up the thread
+        self.mutex.unlock()
 
     def _get_default_model_name(self):
          def _get_default_model_name(self):
@@ -367,11 +393,15 @@ class AbridgerWindow(QMainWindow):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.status_label.setText("Status: User confirmed. Abridging...")
-            # The worker thread continues automatically after emitting the signal
-            # No explicit resume needed here with this design.
+            # Signal the worker thread to proceed
+            if self.worker_thread:
+                 self.worker_thread.resume_after_estimation(proceed=True)
         else:
             self.status_label.setText("Status: User cancelled.")
-            self.cancel_processing() # Stop the thread if user says no
+            # Signal the worker thread NOT to proceed and then request stop
+            if self.worker_thread:
+                 self.worker_thread.resume_after_estimation(proceed=False)
+            # self.cancel_processing() # Let the thread exit naturally after checking flag
 
 
     def handle_abridgment_success(self, output_path):
@@ -401,12 +431,11 @@ class AbridgerWindow(QMainWindow):
         """Stops the worker thread if it's running."""
         if self.worker_thread and self.worker_thread.isRunning():
             # Note: Stopping threads abruptly can be tricky.
-            # This basic implementation signals the thread to stop if it checks the flag.
-            # A more robust implementation might be needed.
+            # This signals the thread's loop/wait condition check.
             logging.info("Attempting to cancel worker thread...")
-            self.worker_thread.stop() # Signal the thread to stop (if implemented in run())
-            # self.worker_thread.quit() # Ask event loop to exit
-            # self.worker_thread.wait(1000) # Wait briefly for it to finish
+            self.worker_thread.stop() # Sets flags and wakes condition
+            # No need to force quit/terminate usually, let run() finish or exit wait
+            # self.worker_thread.wait(500) # Optional short wait
             # if self.worker_thread.isRunning():
             #      logging.warning("Thread did not stop gracefully, terminating.")
             #      self.worker_thread.terminate() # Force terminate (use with caution)

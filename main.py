@@ -5,6 +5,7 @@ import sys
 from typing import Optional
 
 # Import necessary components from our modules
+import ebooklib # Need to import ebooklib to read the original book
 from epub_parser import parse_epub
 from cost_estimator import estimate_abridgment_cost
 from summarizer import SummarizationEngine
@@ -112,9 +113,9 @@ def main(args):
             temperature=args.temperature
             # chain_type can be added as arg later if needed
         )
-        if not engine.llm or not engine.chain:
-             # Errors should have been logged by the engine constructor
-             logging.error("Failed to initialize summarization engine. Exiting.")
+        # Check only for LLM initialization now, chain is not used directly here
+        if not engine.llm:
+             logging.error("Failed to initialize LLM in summarization engine. Exiting.")
              sys.exit(1)
     except Exception as e:
         logging.error(f"An unexpected error occurred during summarization engine initialization: {e}", exc_info=True)
@@ -122,29 +123,55 @@ def main(args):
 
 
     # 5. Summarize / Abridge
-    logging.info("Starting abridgment...")
-    abridged_text: Optional[str] = None
+    # 5. Summarize Chapters
+    logging.info("Starting chapter summarization...")
+    chapter_summaries: Optional[List[str]] = None
     try:
-        abridged_text = engine.abridge_documents(chapter_docs)
-        if abridged_text is None:
-            logging.error("Abridgment process failed. Check logs for details.")
+        chapter_summaries = engine.abridge_documents(chapter_docs)
+        if chapter_summaries is None:
+            logging.error("Chapter summarization process failed. Check logs.")
             sys.exit(1)
-        elif not abridged_text:
-             logging.error("Abridgment resulted in empty text. Cannot build EPUB.")
-             sys.exit(1) # Exit if the summary is empty
-        else:
-             logging.info(f"Abridgment successful. Final text length: {len(abridged_text)} characters.")
+        # Check if all summaries are error placeholders or empty
+        if all(s.startswith("[Error summarizing chapter") or not s for s in chapter_summaries):
+             logging.error("All chapter summaries failed or were empty. Cannot proceed.")
+             sys.exit(1)
+        logging.info("Chapter summarization finished.")
     except Exception as e:
-        logging.error(f"An unexpected error occurred during abridgment: {e}", exc_info=True)
+        logging.error(f"An unexpected error occurred during chapter summarization: {e}", exc_info=True)
         sys.exit(1)
 
+    # 5b. Summarize Overall Book
+    logging.info("Starting overall book summarization...")
+    overall_summary: Optional[str] = None
+    try:
+        overall_summary = engine.summarize_book_overall(chapter_summaries)
+        if overall_summary is None or overall_summary.startswith("[Error generating overall"):
+             logging.warning(f"Could not generate overall book summary: {overall_summary}")
+             # Continue without overall summary chapter
+             overall_summary = "" # Set to empty to avoid error in build_epub
+        logging.info("Overall book summarization finished.")
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during overall summarization: {e}", exc_info=True)
+        overall_summary = "" # Continue without overall summary chapter
 
-    # 6. Build Output EPUB
+
+    # 6. Read Original Book Structure
+    logging.info("Reading original EPUB structure for rebuilding...")
+    try:
+         original_book = ebooklib.epub.read_epub(args.input_epub)
+    except Exception as e:
+         logging.error(f"Failed to re-read original EPUB file {args.input_epub} for building: {e}", exc_info=True)
+         sys.exit(1)
+
+
+    # 7. Build Output EPUB
     logging.info(f"Building output EPUB file at: {args.output_epub}")
     try:
         success = build_epub(
-            abridged_content=abridged_text or "", # Ensure it's not None
-            original_metadata=metadata,
+            chapter_summaries=chapter_summaries,
+            overall_summary=overall_summary,
+            parsed_docs=chapter_docs, # Pass the parsed documents
+            original_book=original_book,
             output_path=args.output_epub
         )
         if not success:
