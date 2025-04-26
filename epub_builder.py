@@ -13,19 +13,21 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def build_epub(
     chapter_summaries: List[str],
     overall_summary: str,
-    parsed_docs: List[Document],  # List of parsed docs with metadata including 'epub_item_id'
+    parsed_docs: List[Document],  # List of parsed docs with metadata including 'epub_item_id', 'chapter_title', 'chapter_number'
     original_book: epub.EpubBook,
     output_path: str,
     abridged_title_prefix: str = "Abridged: "
 ) -> bool:
     """
     Builds a new EPUB file by replacing original chapter content with summaries,
-    preserving structure, and appending an overall summary chapter.
+    preserving structure, and appending an overall summary chapter. Chapter titles
+    are formatted as "Chapter {n}: {original_title}".
 
     Args:
         chapter_summaries: Summaries matching each parsed_doc, in order.
         overall_summary: Combined book summary text.
-        parsed_docs: List of Document objs from epub_parser with metadata['epub_item_id'] and 'chapter_title'.
+        parsed_docs: List of Document objs from epub_parser with metadata:
+                     'epub_item_id', 'chapter_title', 'chapter_number'.
         original_book: The original ebooklib.epub.EpubBook instance.
         output_path: Path to save the new EPUB.
         abridged_title_prefix: Prefix for the new book's title.
@@ -45,19 +47,18 @@ def build_epub(
 
     # --- Copy Metadata ---
     try:
-        # Identifier
         orig_id = original_book.get_metadata('DC', 'identifier')
         new_id = (orig_id[0][0] + "-abridged") if orig_id else f"urn:uuid:{uuid.uuid4()}"
         new_book.set_identifier(new_id)
-        # Title
+
         orig_title = original_book.get_metadata('DC', 'title')
         title_val = orig_title[0][0] if orig_title else 'Untitled'
         new_book.set_title(f"{abridged_title_prefix}{title_val}")
-        # Language
+
         orig_lang = original_book.get_metadata('DC', 'language')
         lang = orig_lang[0][0] if orig_lang else 'en'
         new_book.set_language(lang)
-        # Authors
+
         for author_meta in original_book.get_metadata('DC', 'creator'):
             name, attrs = author_meta
             kwargs = {}
@@ -65,11 +66,12 @@ def build_epub(
             if attrs.get('role'):    kwargs['role'] = attrs['role']
             if attrs.get('id'):      kwargs['uid'] = attrs['id']
             new_book.add_author(name, **kwargs)
+
         logging.info(f"Set metadata: Title='{new_book.title}', Language='{lang}'")
     except Exception as e:
         logging.warning(f"Metadata copy warning: {e}")
 
-    # --- Build summary and title maps ---
+    # --- Build mapping of summaries, titles, and numbers ---
     if len(chapter_summaries) != len(parsed_docs):
         logging.error(
             f"Mismatch: {len(chapter_summaries)} summaries vs {len(parsed_docs)} docs."
@@ -78,16 +80,16 @@ def build_epub(
 
     summary_map: Dict[str, str] = {}
     title_map: Dict[str, str] = {}
+    number_map: Dict[str, int] = {}
     for doc, summary in zip(parsed_docs, chapter_summaries):
         item_id = doc.metadata.get('epub_item_id')
         if item_id:
             summary_map[item_id] = summary
-            # Extract original chapter title from metadata
-            title_map[item_id] = doc.metadata.get('chapter_title', '').strip() or None
+            title_map[item_id] = doc.metadata.get('chapter_title', '').strip()
+            number_map[item_id] = doc.metadata.get('chapter_number', 0)
         else:
-            logging.warning(
-                f"Doc missing epub_item_id: {doc.metadata.get('chapter_title')}"
-            )
+            logging.warning(f"Doc missing epub_item_id: {doc.metadata.get('chapter_title')} (Skipping)")
+
     if not summary_map:
         logging.error("Summary map is empty; no chapters to replace.")
         return False
@@ -98,12 +100,20 @@ def build_epub(
 
     for item_id, item in original_items.items():
         if item_id in summary_map and isinstance(item, epub.EpubHtml):
-            # Replace chapter content
             summary = summary_map[item_id]
             html = summary.replace('\n', '<br/>\n')
-            # Use original parsed title if available
-            title = title_map.get(item_id) or item.title or \
-                item.get_name().rsplit('.', 1)[0].replace('_', ' ').title()
+
+            # Build chapter title: Chapter {number}: {original title}
+            chap_num = number_map.get(item_id)
+            orig_title = title_map.get(item_id)
+            if chap_num and orig_title:
+                title = f"Chapter {chap_num}: {orig_title}"
+            elif chap_num:
+                title = f"Chapter {chap_num}"
+            else:
+                title = orig_title or item.title or \
+                    item.get_name().rsplit('.', 1)[0].replace('_', ' ').title()
+
             new_chap = epub.EpubHtml(
                 title=title,
                 file_name=item.file_name,
@@ -116,9 +126,8 @@ def build_epub(
             )
             new_book.add_item(new_chap)
             new_items[item_id] = new_chap
-            logging.debug(f"Replaced chapter: {item.file_name} with title '{title}'")
+            logging.debug(f"Replaced chapter {chap_num} with title '{title}'")
         else:
-            # Copy other resources (CSS, images, nav, etc.)
             new_book.add_item(item)
             new_items[item_id] = item
             logging.debug(f"Copied item: {getattr(item, 'file_name', item.id)}")
