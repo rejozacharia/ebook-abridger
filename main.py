@@ -130,8 +130,8 @@ def main(args):
             logging.error("Abridgment process failed. Check logs for details.")
             sys.exit(1)
         elif not abridged_text:
-             logging.warning("Abridgment resulted in empty text.")
-             # Decide whether to proceed or exit? Let's proceed but warn.
+             logging.error("Abridgment resulted in empty text. Cannot build EPUB.")
+             sys.exit(1) # Exit if the summary is empty
         else:
              logging.info(f"Abridgment successful. Final text length: {len(abridged_text)} characters.")
     except Exception as e:

@@ -4,7 +4,7 @@ import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QComboBox, QTextEdit, QMessageBox,
-    QProgressBar, QGroupBox
+    QProgressBar, QGroupBox, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%
 class WorkerThread(QThread):
     # Signals to communicate back to the main GUI thread
     estimation_complete = pyqtSignal(dict, float) # Send token estimates (dict) and cost (float)
+    parsing_complete = pyqtSignal(list) # Send list of chapter metadata dicts
     abridgment_complete = pyqtSignal(str) # Send output file path (str) on success
     progress_update = pyqtSignal(int, str) # Send percentage (int) and status message (str)
     error_occurred = pyqtSignal(str) # Send error message (str)
@@ -47,6 +48,15 @@ class WorkerThread(QThread):
             # Ensure chapters is a list of Document objects for estimation
             if not isinstance(chapters, list): # Basic type check
                  raise TypeError("Parsing did not return a list of chapters.")
+            # Extract metadata for UI display before estimation
+            chapter_info_list = [
+                {
+                    "title": doc.metadata.get('chapter_title', f"Chapter {doc.metadata.get('chapter_number', i+1)}"),
+                    "tokens": doc.metadata.get('token_count', 'N/A')
+                }
+                for i, doc in enumerate(chapters)
+            ]
+            self.parsing_complete.emit(chapter_info_list)
             self.progress_update.emit(20, f"Parsed {len(chapters)} chapters.")
 
             # --- Stage 2: Estimation ---
@@ -60,21 +70,53 @@ class WorkerThread(QThread):
             # --- Wait for Confirmation (Handled by GUI interaction) ---
             # The thread might pause here or the GUI handles the flow control
 
-            # --- Stage 3: Abridgment (Assuming confirmation received) ---
-            self.progress_update.emit(50, "Starting abridgment (this may take a while)...")
-            # Actual call to SummarizationEngine and abridgment
-            # Note: Temperature could be made configurable in GUI later
+            # --- Stage 3: Abridgment (Chapter by Chapter) ---
+            self.progress_update.emit(50, "Initializing LLM for abridgment...")
             engine = SummarizationEngine(
                 llm_provider=self.provider,
-                llm_model_name=self.model # Pass None if user didn't specify
+                llm_model_name=self.model, # Pass None if user didn't specify
+                # We don't need the chain type here anymore as we loop manually
             )
-            if not engine.llm or not engine.chain:
-                 raise ConnectionError("Failed to initialize LLM or summarization chain.") # More specific error
+            if not engine.llm:
+                 raise ConnectionError("Failed to initialize LLM.")
 
-            abridged_text = engine.abridge_documents(chapters)
-            if abridged_text is None: # Check for None explicitly
-                 raise ValueError("Abridgment process failed or returned no text.")
-            self.progress_update.emit(80, "Abridgment finished.")
+            all_chapter_summaries = []
+            total_chapters = len(chapters)
+            # Progress calculation: 50% to 90% allocated for summarization
+            summarization_progress_range = 40 # 90 - 50
+
+            for i, doc in enumerate(chapters):
+                if not self._is_running: # Check for cancellation
+                     raise InterruptedError("Processing cancelled by user.")
+
+                chapter_num = doc.metadata.get('chapter_number', i + 1)
+                chapter_title = doc.metadata.get('chapter_title', f'Chapter {chapter_num}')
+                # Calculate progress percentage within the summarization range
+                current_progress = 50 + int(((i + 1) / total_chapters) * summarization_progress_range)
+                self.progress_update.emit(current_progress, f"Abridging Chapter {chapter_num}/{total_chapters}: '{chapter_title[:30]}...'")
+
+                # Call the engine's method to summarize the single chapter
+                chapter_summary = engine.summarize_single_chapter(doc)
+
+                # The summarize_single_chapter method handles logging and returns
+                # the summary string, an empty string for empty summaries,
+                # or an error placeholder string.
+                all_chapter_summaries.append(chapter_summary if chapter_summary is not None else f"[Error summarizing chapter {chapter_num}]")
+
+                # Emit error if the summary indicates an error occurred during processing
+                if chapter_summary is not None and chapter_summary.startswith("[Error summarizing chapter"):
+                     # Extract the specific error message if possible, or use the placeholder
+                     error_msg = chapter_summary
+                     self.error_occurred.emit(error_msg)
+                     # Continue processing other chapters for now
+
+            # Combine summaries
+            abridged_text = "\n\n".join(all_chapter_summaries)
+            if not abridged_text:
+                 # Check if the final combined text is empty (e.g., all chapters failed or were empty)
+                 raise ValueError("Abridgment resulted in empty final text.")
+            logging.info("Chapter-by-chapter abridgment process completed.")
+            self.progress_update.emit(90, "Abridgment finished.") # Mark end of summarization phase
 
             # --- Stage 4: Building Output EPUB ---
             self.progress_update.emit(90, "Building output EPUB...")
@@ -163,6 +205,18 @@ class AbridgerWindow(QMainWindow):
         model_layout.addWidget(QLabel("Model (optional):"))
         model_layout.addWidget(self.model_combo)
         main_layout.addWidget(model_group)
+        main_layout.addWidget(model_group)
+
+        # --- Chapter Info Display ---
+        chapter_group = QGroupBox("Chapter Information")
+        chapter_layout = QVBoxLayout()
+        chapter_group.setLayout(chapter_layout)
+        self.chapter_list_widget = QListWidget()
+        # Optional: Set max height or make it expandable
+        # self.chapter_list_widget.setMaximumHeight(150)
+        chapter_layout.addWidget(self.chapter_list_widget)
+        main_layout.addWidget(chapter_group)
+
 
         # --- Estimation Display ---
         estimation_group = QGroupBox("Estimation Results")
@@ -170,10 +224,10 @@ class AbridgerWindow(QMainWindow):
         estimation_group.setLayout(estimation_layout)
         self.estimation_display = QTextEdit()
         self.estimation_display.setReadOnly(True)
-        self.estimation_display.setText("Click 'Estimate & Abridge' to see cost/token estimates.")
+        self.estimation_display.setFixedHeight(80) # Make estimation box smaller
+        self.estimation_display.setText("Select files and click 'Estimate & Abridge'.")
         estimation_layout.addWidget(self.estimation_display)
         main_layout.addWidget(estimation_group)
-
         # --- Controls ---
         control_layout = QHBoxLayout()
         self.start_button = QPushButton("Estimate & Abridge")
@@ -270,12 +324,27 @@ class AbridgerWindow(QMainWindow):
         self.worker_thread = WorkerThread(self.input_file_path, self.output_file_path, provider, model)
         
         # Connect signals from the worker thread to GUI slots
+        self.worker_thread.parsing_complete.connect(self.handle_parsing_complete) # Connect new signal
         self.worker_thread.estimation_complete.connect(self.handle_estimation_results)
         self.worker_thread.abridgment_complete.connect(self.handle_abridgment_success)
         self.worker_thread.progress_update.connect(self.update_progress)
         self.worker_thread.error_occurred.connect(self.handle_error)
         
         self.worker_thread.start()
+
+    def handle_parsing_complete(self, chapter_info_list):
+        """Populates the chapter list widget."""
+        self.chapter_list_widget.clear()
+        if not chapter_info_list:
+            self.chapter_list_widget.addItem("No chapters found or parsed.")
+            return
+
+        for info in chapter_info_list:
+            title = info.get('title', 'Unknown Chapter')
+            tokens = info.get('tokens', 'N/A')
+            item_text = f"{title} (Tokens: {tokens})"
+            self.chapter_list_widget.addItem(QListWidgetItem(item_text))
+        logging.info(f"Displayed info for {len(chapter_info_list)} chapters.")
 
     def handle_estimation_results(self, tokens, cost):
         """Displays estimation results and asks for confirmation."""
@@ -298,8 +367,8 @@ class AbridgerWindow(QMainWindow):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.status_label.setText("Status: User confirmed. Abridging...")
-            # Note: The worker thread continues automatically after emitting the signal in this simple design.
-            # A more complex design might involve pausing/resuming the thread.
+            # The worker thread continues automatically after emitting the signal
+            # No explicit resume needed here with this design.
         else:
             self.status_label.setText("Status: User cancelled.")
             self.cancel_processing() # Stop the thread if user says no

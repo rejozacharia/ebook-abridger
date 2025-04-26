@@ -1,8 +1,8 @@
 import logging
 from typing import List, Dict, Optional
 from langchain_core.documents import Document
-from langchain.chains.summarize import load_summarize_chain
 from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.messages import HumanMessage # For invoking chat models
 
 from llm_config import get_llm_instance # Use absolute import
 from prompts import MAP_PROMPT, COMBINE_PROMPT # Use absolute import
@@ -39,13 +39,13 @@ class SummarizationEngine:
         self.temperature = temperature
         self.chain_type = chain_type
         self.map_prompt = map_prompt
-        self.combine_prompt = combine_prompt
+        self.combine_prompt = combine_prompt # Keep for potential future use? Or remove? Let's keep for now.
         self.llm: Optional[BaseLanguageModel] = None
-        self.chain = None
+        # self.chain = None # Removed chain
 
         self._initialize_llm()
-        if self.llm:
-            self._initialize_chain()
+        # if self.llm: # Removed chain initialization
+        #     self._initialize_chain()
 
     def _initialize_llm(self):
         """Initializes the LLM instance."""
@@ -62,27 +62,39 @@ class SummarizationEngine:
             logging.error(f"Error initializing LLM: {e}", exc_info=True)
             self.llm = None # Ensure llm is None if init fails
 
-    def _initialize_chain(self):
-        """Initializes the LangChain summarization chain."""
-        if not self.llm:
-            logging.error("Cannot initialize chain: LLM is not available.")
-            return
+    # Removed _initialize_chain method
 
-        logging.info(f"Initializing summarization chain with type: {self.chain_type}")
+    def summarize_single_chapter(self, chapter_doc: Document) -> Optional[str]:
+        """Summarizes a single chapter document using the configured LLM and map_prompt."""
+        if not self.llm:
+            logging.error("LLM not initialized. Cannot summarize chapter.")
+            return None
+
         try:
-            # Note: For 'refine', combine_prompt is used as the refine_prompt.
-            # LangChain's load_summarize_chain handles this mapping internally.
-            self.chain = load_summarize_chain(
-                llm=self.llm,
-                chain_type=self.chain_type,
-                map_prompt=self.map_prompt,
-                combine_prompt=self.combine_prompt,
-                verbose=True # Set to True for more detailed logging from LangChain
-            )
-            logging.info("Summarization chain initialized successfully.")
+            # Format the map prompt for the current chapter
+            prompt_text = self.map_prompt.format(text=chapter_doc.page_content)
+            # Invoke the LLM
+            response = self.llm.invoke([HumanMessage(content=prompt_text)])
+
+            if hasattr(response, 'content'):
+                chapter_summary = response.content.strip()
+            else:
+                chapter_summary = str(response).strip()
+
+            if not chapter_summary:
+                 logging.warning(f"Chapter {chapter_doc.metadata.get('chapter_number', '?')} summary was empty.")
+                 return "" # Return empty string for empty summary
+            else:
+                 # Log summary generation here as well
+                 logging.info(f"  Summary generated for Chapter {chapter_doc.metadata.get('chapter_number', '?')} (first 100 chars): {chapter_summary[:100]}...")
+                 return chapter_summary
+
         except Exception as e:
-            logging.error(f"Error initializing {self.chain_type} chain: {e}", exc_info=True)
-            self.chain = None
+            chapter_num = chapter_doc.metadata.get('chapter_number', '?')
+            chapter_title = chapter_doc.metadata.get('chapter_title', 'Unknown')
+            logging.error(f"Error processing Chapter {chapter_num} ('{chapter_title}'): {e}", exc_info=True)
+            return f"[Error summarizing chapter {chapter_num}]" # Return error placeholder
+
 
     def abridge_documents(self, chapter_docs: List[Document]) -> Optional[str]:
         """
@@ -95,32 +107,34 @@ class SummarizationEngine:
             The final abridged text as a string, or None if an error occurs or
             the engine wasn't initialized properly.
         """
-        if not self.chain or not self.llm:
-            logging.error("Summarization engine or LLM not initialized. Cannot abridge.")
+        if not self.llm:
+            logging.error("LLM not initialized. Cannot abridge.")
             return None
         if not chapter_docs:
             logging.warning("No documents provided to abridge.")
             return "" # Return empty string for empty input
 
-        logging.info(f"Starting abridgment process for {len(chapter_docs)} documents using '{self.chain_type}' chain...")
-        try:
-            # The chain expects a dictionary with 'input_documents' key
-            result = self.chain.invoke({"input_documents": chapter_docs})
-            
-            # The output structure might vary slightly, but usually under 'output_text'
-            output_text = result.get("output_text") 
-            if output_text is None:
-                 logging.error("Chain execution finished, but 'output_text' not found in the result.")
-                 # Log the full result for debugging if output_text is missing
-                 logging.debug(f"Full chain result: {result}")
-                 return None
-                 
-            logging.info("Abridgment process completed successfully.")
-            return output_text.strip()
+        logging.info(f"Starting chapter-by-chapter abridgment for {len(chapter_docs)} documents...")
+        all_chapter_summaries = []
+        total_chapters = len(chapter_docs)
 
-        except Exception as e:
-            logging.error(f"Error during chain execution: {e}", exc_info=True)
-            return None
+        for i, doc in enumerate(chapter_docs):
+            chapter_num = doc.metadata.get('chapter_number', i + 1)
+            chapter_title = doc.metadata.get('chapter_title', f'Chapter {chapter_num}')
+            logging.info(f"Processing Chapter {chapter_num}/{total_chapters}: '{chapter_title}'...")
+
+            # Call the new method to summarize the chapter
+            chapter_summary = self.summarize_single_chapter(doc)
+            all_chapter_summaries.append(chapter_summary if chapter_summary is not None else f"[Error summarizing chapter {chapter_num}]")
+
+            # --- TODO: Add progress signal emission here for GUI ---
+            # Example: self.progress_signal.emit(int((i + 1) / total_chapters * 100))
+
+        # Combine chapter summaries (simple concatenation with double newline)
+        final_text = "\n\n".join(all_chapter_summaries)
+        logging.info("Chapter-by-chapter abridgment process completed.")
+        logging.info(f"Final Combined Summary (first 500 chars): {final_text[:500]}...")
+        return final_text
 
 # Example usage (for testing purposes)
 if __name__ == '__main__':

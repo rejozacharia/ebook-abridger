@@ -3,6 +3,7 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 from langchain_core.documents import Document
 import logging
+from utils import count_tokens # Import token counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,6 +97,10 @@ def parse_epub(file_path: str) -> tuple[list[Document], dict]:
                     if title_tag and title_tag.get_text(strip=True):
                         title = title_tag.get_text(strip=True)
                     
+                    # Count tokens (using a placeholder model name for now, as actual model isn't known here)
+                    # A more accurate approach might pass the selected model later or use a generic tokenizer
+                    token_count = count_tokens(text_content, model_name="gpt-4") # Using gpt-4 as proxy
+
                     # Create LangChain Document
                     doc = Document(
                         page_content=text_content,
@@ -103,6 +108,7 @@ def parse_epub(file_path: str) -> tuple[list[Document], dict]:
                             'source': file_path,
                             'chapter_title': title,
                             'chapter_number': chapter_count,
+                            'token_count': token_count, # Add token count
                             'epub_item_id': item.id,
                             'epub_item_name': item.get_name(),
                             'book_title': metadata.get('title'),
@@ -110,7 +116,7 @@ def parse_epub(file_path: str) -> tuple[list[Document], dict]:
                         }
                     )
                     chapters.append(doc)
-                    logging.debug(f"Added chapter: '{title}' (Length: {len(text_content)} chars)")
+                    logging.debug(f"Added chapter: '{title}' (Tokens: {token_count}, Length: {len(text_content)} chars)")
 
                 except Exception as e:
                     logging.error(f"Error processing chapter item {item.get_name()}: {e}", exc_info=True)
@@ -148,8 +154,9 @@ if __name__ == '__main__':
                 print(f"{key.capitalize()}: {value}")
             
             print(f"\n--- Parsed Chapters ({len(docs)}) ---")
-            # Print info about the first chapter
+            # Print info about the first chapter, including token count
             print(f"\nChapter 1 Metadata: {docs[0].metadata}")
+            print(f"Chapter 1 Token Count: {docs[0].metadata.get('token_count', 'N/A')}")
             print(f"\nChapter 1 Content (first 500 chars):\n{docs[0].page_content[:500]}...")
         else:
             print(f"Could not parse chapters from {test_epub_path}")
