@@ -1,42 +1,36 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
-from PyInstaller.utils.hooks import collect_all
 from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
-proj_root = os.getcwd()   
-resources_path = os.path.join(proj_root, 'resources')
+# ─── Paths ────────────────────────────────────────────────────────────────
+proj_root      = os.getcwd()
+resources_dir  = os.path.join(proj_root, 'resources')
 
-# Common datas (shared by both GUI and CLI)
+# ─── Shared data files ─────────────────────────────────────────────────────
+# (only bundle user_settings.json if it actually exists)
 common_datas = [
-    (os.path.join(proj_root, 'config.yaml'), '.'),
-    (os.path.join(proj_root, 'user_settings.json'), '.'),
-    (os.path.join(proj_root, '.env.template'), '.'),
-    (os.path.join(resources_path, 'README.txt'), '.')
+    (os.path.join(proj_root, 'config.yaml'),        '.'),
+    (os.path.join(proj_root, '.env.template'),      '.'),
+    (os.path.join(resources_dir, 'README.txt'),     '.'),
 ]
+user_settings = os.path.join(proj_root, 'user_settings.json')
+if os.path.exists(user_settings):
+    common_datas.append((user_settings, '.'))
 
-hidden_imports = []
-block_cipher = None
-
-# --- GUI BUILD ---
-gui_script_path = 'gui.py'
-
+# ─── Build GUI EXE ─────────────────────────────────────────────────────────
 a_gui = Analysis(
-    [gui_script_path],
-    pathex=['.'],
+    ['gui.py'],
+    pathex=[proj_root],
     binaries=[],
     datas=common_datas,
-    hiddenimports=hidden_imports,
+    hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
     excludes=[]
 )
 
-pyz_gui = PYZ(
-    a_gui.pure,
-    a_gui.zipped_data,
-    cipher=block_cipher
-)
+pyz_gui = PYZ(a_gui.pure, a_gui.zipped_data, cipher=None)
 
 exe_gui = EXE(
     pyz_gui,
@@ -44,33 +38,27 @@ exe_gui = EXE(
     [],
     exclude_binaries=True,
     name='ebook_abridger_gui',
-    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # <-- GUI has NO console
-    icon=os.path.join(resources_path, 'ebookabridger.ico')
+    console=False,
+    contents_directory='.',  
+    icon=os.path.join(resources_dir, 'ebookabridger.ico')
 )
 
-# --- CLI BUILD ---
-cli_script_path = 'main.py'  
-
+# ─── Build CLI EXE ─────────────────────────────────────────────────────────
 a_cli = Analysis(
-    [cli_script_path],
-    pathex=['.'],
+    ['main.py'],
+    pathex=[proj_root],
     binaries=[],
     datas=common_datas,
-    hiddenimports=hidden_imports,
+    hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
     excludes=[]
 )
 
-pyz_cli = PYZ(
-    a_cli.pure,
-    a_cli.zipped_data,
-    cipher=block_cipher
-)
+pyz_cli = PYZ(a_cli.pure, a_cli.zipped_data, cipher=None)
 
 exe_cli = EXE(
     pyz_cli,
@@ -78,15 +66,15 @@ exe_cli = EXE(
     [],
     exclude_binaries=True,
     name='ebook_abridger_cli',
-    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # <-- CLI HAS console
-    icon=os.path.join(resources_path, 'ebookabridger.ico')
+    console=True,
+    contents_directory='.',  
+    icon=os.path.join(resources_dir, 'ebookabridger.ico')
 )
 
-# --- COLLECT both together ---
+# ─── Collect everything into one folder ────────────────────────────────────
 coll = COLLECT(
     exe_gui,
     exe_cli,

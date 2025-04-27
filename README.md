@@ -112,9 +112,6 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
       gemini-2.0-flash:
         input_cost_per_million_tokens: 0.1
         output_cost_per_million_tokens: 0.4
-      gpt-4:
-        input_cost_per_million_tokens: 10.0
-        output_cost_per_million_tokens: 30.0
       llama3:
         input_cost_per_million_tokens: 0.0
         output_cost_per_million_tokens: 0.0
@@ -154,19 +151,14 @@ python gui.py
 Requires [PyInstaller](https://www.pyinstaller.org/):
 ```bash
 pip install pyinstaller
-pyinstaller build.spec        # GUI
-pyinstaller build_cli.spec    # CLI
+pyinstaller build.spec        
 ```
 Executables are output to `dist/`.
-
-> **Distribution Tip:**
-> - **Don’t** commit the `dist/` folder to Git. Instead,
-> - Create GitHub **Releases** and attach your built `.exe` files there for clean versioning.
 
 ---
 
 ## 📝 License
-Apache © Rejo Zacharia
+Apache © Rejo Mathew
 
 ---
 
