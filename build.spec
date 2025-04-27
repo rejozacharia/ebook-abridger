@@ -1,72 +1,99 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import sys
+import os
 from PyInstaller.utils.hooks import collect_all
 from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
-# Path to the GUI script
-script_path = 'gui.py'
+proj_root = os.getcwd()   
+resources_path = os.path.join(proj_root, 'resources')
 
-# Non-Python data files to bundle alongside the executable
-datas = [
-    ('config.yaml', '.'),
-    ('.env', '.'),
-    ('user_settings.json', '.')
+# Common datas (shared by both GUI and CLI)
+common_datas = [
+    (os.path.join(proj_root, 'config.yaml'), '.'),
+    (os.path.join(proj_root, 'user_settings.json'), '.'),
+    (os.path.join(proj_root, '.env.template'), '.'),
+    (os.path.join(resources_path, 'README.txt'), '.')
 ]
 
-# Hidden imports if PyInstaller misses any
 hidden_imports = []
-
-# Cipher (unused)
 block_cipher = None
 
-# --- Analysis ---
-a = Analysis(
-    [script_path],
+# --- GUI BUILD ---
+gui_script_path = 'gui.py'
+
+a_gui = Analysis(
+    [gui_script_path],
     pathex=['.'],
     binaries=[],
-    datas=datas,
+    datas=common_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[]
 )
 
-# --- PYZ ---
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
+pyz_gui = PYZ(
+    a_gui.pure,
+    a_gui.zipped_data,
     cipher=block_cipher
 )
 
-# --- EXE (onefile) ---
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],               # no additional binaries
+exe_gui = EXE(
+    pyz_gui,
+    a_gui.scripts,
+    [],
     exclude_binaries=True,
     name='ebook_abridger_gui',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,    # GUI mode (no console)
-    icon='ebookabridger.ico'  # Optional: path to your .ico
+    console=False,  # <-- GUI has NO console
+    icon=os.path.join(resources_path, 'ebookabridger.ico')
 )
 
-# --- COLLECT ---
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+# --- CLI BUILD ---
+cli_script_path = 'main.py'  
+
+a_cli = Analysis(
+    [cli_script_path],
+    pathex=['.'],
+    binaries=[],
+    datas=common_datas,
+    hiddenimports=hidden_imports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[]
+)
+
+pyz_cli = PYZ(
+    a_cli.pure,
+    a_cli.zipped_data,
+    cipher=block_cipher
+)
+
+exe_cli = EXE(
+    pyz_cli,
+    a_cli.scripts,
+    [],
+    exclude_binaries=True,
+    name='ebook_abridger_cli',
+    debug=False,
+    bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    name='ebook_abridger_gui'
+    console=True,  # <-- CLI HAS console
+    icon=os.path.join(resources_path, 'ebookabridger.ico')
 )
 
-# To create the CLI executable, copy this spec, change:
-#   script_path = 'main.py'
-#   console=True in EXE
-#   name='ebook_abridger_cli'
-# then run: pyinstaller build.spec
+# --- COLLECT both together ---
+coll = COLLECT(
+    exe_gui,
+    exe_cli,
+    a_gui.binaries + a_cli.binaries,
+    a_gui.zipfiles + a_cli.zipfiles,
+    a_gui.datas + a_cli.datas,
+    strip=False,
+    upx=True,
+    name='ebook_abridger'
+)

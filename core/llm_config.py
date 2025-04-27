@@ -77,7 +77,7 @@ def get_ollama_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
         return None
 
 def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    api_base = _env.get("OPENAI_API_BASE")
+    api_base = _env.get("OPENAI_API_BASE_URL")
     if not _env.get("OPENROUTER_API_KEY"):
         logging.error("OPENROUTER_API_KEY missing; cannot init OpenRouter LLM.")
         return None

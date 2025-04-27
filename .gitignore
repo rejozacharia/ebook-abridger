@@ -38,6 +38,6 @@ abridger_engine.log
 #Project Plan
 PLAN.MD
 
-# ...but do track these two
+# ...but do track these 
 !build.spec
-!build_cli.spec
+!.env.template
