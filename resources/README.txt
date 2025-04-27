@@ -8,5 +8,5 @@ Welcome to AI Ebook Abridger!
    python gui.py
    # or
    python main.py input.epub output.epub -p google
-
+5) For more details on usage/features, goto https://github.com/rejozacharia/ebook-abridger
 Enjoy!
