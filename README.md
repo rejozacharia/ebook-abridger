@@ -41,9 +41,9 @@ ebook-abridger/
 ├── main.py                   # CLI entrypoint
 ├── config.yaml               # Non-sensitive defaults & model/pricing configs
 ├── user_settings.json        # Persisted GUI overrides (created on first run)
-├── .env                      # API keys & secrets (not checked in)
+├── .env.tempate              # Rename to .env and add your API keys
 ├── requirements.txt          # Python dependencies
-└── build.spec                # PyInstaller spec for GUI
+└── build.spec                # PyInstaller spec for GUI/CLI
 ```
 
 ---
@@ -76,13 +76,9 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
    OPENAI_API_BASE=https://openrouter.ai/api/v1
    OLLAMA_BASE_URL=http://localhost:11434
 
-   # Model lists (comma‑separated, asterisk `*` marks default)
-   GOOGLE_MODELS=gemini-1.5-flash*,gemini-1.5-pro
-   OLLAMA_MODELS=llama3*,mistral
-   OPENROUTER_MODELS=mistralai/mistral-7b-instruct*,anthropic/claude-3-haiku
    ```
 
-2. **Edit `config.yaml`** to adjust summary‑length percentages:
+2. **Edit `config.yaml`** to adjust summary‑length percentages, add/change models (these appear in GUI) and their pricing :
    ```yaml
    chapter_summary_lengths:
      very_short: "10-15%"
@@ -90,6 +86,38 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
      medium: "35-50%"
      long: "50-75%"
    default_chapter_summary_length: "short"
+  
+    models:
+      google:
+        default: "gemini-2.0-flash"
+        available:
+          - "gemma-3-27b-it"
+          - "gemini-2.0-flash"
+          - "gemini-1.5-flash"
+          - "gemini-1.5-pro"
+      openrouter:
+        default: "mistralai/mistral-7b-instruct"
+        available:
+          - "mistralai/mistral-7b-instruct"
+          - "google/gemini-flash-1.5"
+          - "anthropic/claude-3-haiku"
+      ollama:
+        default: "llama3"
+        available:
+          - "llama3"
+          - "mistral"
+          - "phi3"
+
+    pricing:
+      gemini-2.0-flash:
+        input_cost_per_million_tokens: 0.1
+        output_cost_per_million_tokens: 0.4
+      gpt-4:
+        input_cost_per_million_tokens: 10.0
+        output_cost_per_million_tokens: 30.0
+      llama3:
+        input_cost_per_million_tokens: 0.0
+        output_cost_per_million_tokens: 0.0
    ```
 
 ---
