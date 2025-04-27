@@ -1,56 +1,38 @@
-import os
 import logging
-from dotenv import load_dotenv
 from typing import Optional
 
 from pydantic import Field, SecretStr
-import yaml
+from langchain_core.utils.utils import secret_from_env
 
-# --- External LLM clients ---
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.llms import Ollama
 from langchain_openai import ChatOpenAI
-from langchain_core.utils.utils import secret_from_env
 
-# --- Logging setup ---
+from core.config_loader import load_env, load_config
+
+# ─── Logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Load .env for secrets ---
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path=dotenv_path)
-    logging.info(f"Loaded environment variables from: {dotenv_path}")
-else:
-    logging.warning(f".env not found at {dotenv_path}; loading from system env")
-    load_dotenv()
+# ─── Load environment variables & config file ─────────────────────────────────
+_env    = load_env()         # dict with GOOGLE_API_KEY, OPENROUTER_API_KEY, etc.
+_config = load_config()      # dict from project_root/config.yaml
 
-# --- Load config.yaml for non‐sensitive defaults ---
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
-if not os.path.exists(CONFIG_PATH):
-    raise FileNotFoundError(f"config.yaml not found at {CONFIG_PATH}")
-with open(CONFIG_PATH, 'r') as f:
-    _CONFIG = yaml.safe_load(f)
+# ─── Pull defaults & models from config.yaml ─────────────────────────────────
+_DEFAULTS = _config.get("defaults", {})
+_MODELS   = _config.get("models", {})
 
-# --- Pull defaults/models/pricing from YAML ---
-_DEFAULTS = _CONFIG.get("defaults", {})
-MODELS    = _CONFIG.get("models", {})
+DEFAULT_TEMPERATURE      = _DEFAULTS.get("temperature", 0.3)
+SHORT_CHAPTER_WORD_LIMIT = _DEFAULTS.get("short_chapter_word_limit", 150)
+DEFAULT_CHAIN_TYPE       = _DEFAULTS.get("chain_type", "map_reduce")
 
-DEFAULT_TEMPERATURE           = _DEFAULTS.get("temperature", 0.3)
-SHORT_CHAPTER_WORD_LIMIT      = _DEFAULTS.get("short_chapter_word_limit", 150)
-DEFAULT_CHAIN_TYPE            = _DEFAULTS.get("chain_type", "map_reduce")
-
-# --- Helper to read model lists from config.yaml ---
+# ─── Helpers to read model lists & defaults ───────────────────────────────────
 def get_available_models(provider: str) -> list[str]:
-    """Return the list of available model names for a given provider."""
-    prov = provider.lower()
-    return MODELS.get(prov, {}).get("available", [])
+    return _MODELS.get(provider.lower(), {}).get("available", [])
 
 def get_default_model(provider: str) -> Optional[str]:
-    """Return the default model for a given provider."""
-    prov = provider.lower()
-    return MODELS.get(prov, {}).get("default")
+    return _MODELS.get(provider.lower(), {}).get("default")
 
-# --- OpenRouter subclass of ChatOpenAI (unchanged) ---
+# ─── OpenRouter subclass of ChatOpenAI ────────────────────────────────────────
 class ChatOpenRouter(ChatOpenAI):
     openai_api_key: SecretStr = Field(
         alias="api_key",
@@ -61,9 +43,9 @@ class ChatOpenRouter(ChatOpenAI):
     def lc_secrets(self) -> dict[str, str]:
         return {"openai_api_key": "OPENROUTER_API_KEY"}
 
-# --- LLM factories, now using defaults from config.yaml ---
+# ─── LLM factory functions ────────────────────────────────────────────────────
 def get_google_genai_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = _env.get("GOOGLE_API_KEY")
     if not api_key:
         logging.error("GOOGLE_API_KEY missing; cannot init Gemini.")
         return None
@@ -82,7 +64,7 @@ def get_google_genai_llm(model_name: str, temperature: float = DEFAULT_TEMPERATU
 
 def get_ollama_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
     params = {"model": model_name, "temperature": temperature}
-    base = os.getenv("OLLAMA_BASE_URL")
+    base   = _env.get("OLLAMA_BASE_URL")
     if base:
         params["base_url"] = base
         logging.info(f"Ollama base URL override: {base}")
@@ -95,8 +77,8 @@ def get_ollama_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
         return None
 
 def get_openrouter_llm(model_name: str, temperature: float = DEFAULT_TEMPERATURE):
-    api_base = os.getenv("OPENAI_API_BASE_URL")
-    if not os.getenv("OPENROUTER_API_KEY"):
+    api_base = _env.get("OPENAI_API_BASE")
+    if not _env.get("OPENROUTER_API_KEY"):
         logging.error("OPENROUTER_API_KEY missing; cannot init OpenRouter LLM.")
         return None
     try:

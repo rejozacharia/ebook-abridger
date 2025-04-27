@@ -15,12 +15,12 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMutex, QWaitCondition
 
 import yaml
-from config_loader import load_config
-from epub_parser import parse_epub
-from cost_estimator import estimate_abridgment_cost
-from summarizer import SummarizationEngine
-from epub_builder import build_epub
-from llm_config import get_available_models, get_default_model, DEFAULT_TEMPERATURE, SHORT_CHAPTER_WORD_LIMIT
+from core.config_loader import load_config
+from core.epub_parser import parse_epub
+from core.cost_estimator import estimate_abridgment_cost
+from core.summarizer import SummarizationEngine
+from core.epub_builder import build_epub
+from core.llm_config import get_available_models, get_default_model, DEFAULT_TEMPERATURE, SHORT_CHAPTER_WORD_LIMIT
 
 # ------------------------------------------------------------------
 # Load application config for summary lengths
@@ -252,7 +252,7 @@ class WorkerThread(QThread):
 class AbridgerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('AI Ebook Abridger')
+        self.setWindowTitle('Ebook Abridger')
         self.resize(600, 600)
 
         self.settings = load_user_settings()

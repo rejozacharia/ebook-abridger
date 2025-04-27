@@ -34,3 +34,10 @@ Thumbs.db
 
 # Log files
 abridger_engine.log
+
+#Project Plan
+PLAN.MD
+
+# ...but do track these two
+!build.spec
+!build_cli.spec

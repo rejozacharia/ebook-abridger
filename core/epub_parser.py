@@ -4,7 +4,7 @@ from ebooklib.epub import Section, Link
 from bs4 import BeautifulSoup
 from langchain_core.documents import Document
 import logging
-from utils import count_tokens  # Import token counter
+from core.token_counter import count_tokens  # Import token counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

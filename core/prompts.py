@@ -2,10 +2,14 @@ import os
 import yaml
 from langchain_core.prompts import PromptTemplate
 
-# ─── load our app config ──────────────────────────────────────────────────────
-CFG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+# ─── locate project root & load config.yaml ─────────────────────────────────
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+CFG_PATH = os.path.join(_PROJECT_ROOT, "config.yaml")
+if not os.path.exists(CFG_PATH):
+    raise FileNotFoundError(f"config.yaml not found at {CFG_PATH}")
 with open(CFG_PATH, 'r') as f:
     _CFG = yaml.safe_load(f)
+
 
 LENGTH_MAP = _CFG["chapter_summary_lengths"]
 DEFAULT_LENGTH = _CFG.get("default_summary_length", "short")

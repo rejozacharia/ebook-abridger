@@ -1,8 +1,8 @@
 import logging
 from typing import List, Dict, Tuple
 from langchain_core.documents import Document
-from utils import count_tokens # Use absolute import
-from config_loader import load_config
+from core.token_counter import count_tokens # Use absolute import
+from core.config_loader import load_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,7 +13,7 @@ MAP_OUTPUT_FACTOR = 0.15 # Estimate 15% length for safety margin over 10% target
 # Factor to estimate combine phase tokens based on the *output* of the map phase
 COMBINE_FACTOR = 0.5 # Estimate combine phase uses tokens ~50% of the map output size
 
-config = load_config("config.yaml")
+config = load_config()
 PRICING = config["pricing"]
 
 def get_model_pricing(model_name: str) -> Dict[str, float]:

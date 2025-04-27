@@ -6,12 +6,12 @@ import json
 from typing import Optional, List, Dict, Tuple
 
 import ebooklib  # Need to import ebooklib to read the original book
-from config_loader import load_config
-from epub_parser import parse_epub
-from cost_estimator import estimate_abridgment_cost
-from summarizer import SummarizationEngine
-from epub_builder import build_epub
-from llm_config import get_default_model
+from core.config_loader import load_config
+from core.epub_parser import parse_epub
+from core.cost_estimator import estimate_abridgment_cost
+from core.summarizer import SummarizationEngine
+from core.epub_builder import build_epub
+from core.llm_config import get_default_model
 
 # Load application config for summary lengths
 CONFIG = load_config(os.path.join(os.path.dirname(__file__), 'config.yaml'))

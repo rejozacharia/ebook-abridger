@@ -3,8 +3,8 @@ from typing import List, Optional
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 
-from llm_config import get_llm_instance
-from prompts import get_map_prompt, OVERALL_SUMMARY_PROMPT
+from core.llm_config import get_llm_instance
+from core.prompts import get_map_prompt, OVERALL_SUMMARY_PROMPT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
