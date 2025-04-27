@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QTextEdit, QMessageBox,
     QProgressBar, QGroupBox, QListWidget, QListWidgetItem,
-    QDialog, QFormLayout, QSpinBox, QDialogButtonBox, QMenuBar, QComboBox, QCheckBox
+    QDialog, QFormLayout, QSpinBox, QDialogButtonBox, QMenuBar,
+    QComboBox, QCheckBox
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMutex, QWaitCondition
@@ -37,8 +38,6 @@ logging.basicConfig(
 )
 
 def load_user_settings() -> dict:
-    """Load per-user GUI overrides or fall back to config defaults."""
-    # Default values
     defaults = {
         'provider': 'google',
         'model': get_default_model('google'),
@@ -47,25 +46,18 @@ def load_user_settings() -> dict:
         'short_chapter_word_limit': SHORT_CHAPTER_WORD_LIMIT,
         'summary_length_key': DEFAULT_CHAPTER_SUMMARY_LENGTH
     }
-
-    # If a settings file exists, load and merge
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r') as f:
                 loaded = json.load(f)
-            # Ensure any missing keys are filled from defaults
             for k, v in defaults.items():
                 loaded.setdefault(k, v)
             return loaded
         except Exception:
-            logging.warning("Could not read user_settings.json; using defaults.")
-
-    # No file or failure → return a copy of defaults
+            logging.warning('Could not read user_settings.json; using defaults.')
     return defaults.copy()
 
-
 def save_user_settings(settings: dict):
-    """Persist user settings to disk."""
     try:
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(settings, f, indent=2)
@@ -80,31 +72,31 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle('Settings')
         self.settings = current_settings.copy()
-
         layout = QFormLayout(self)
+
         # Provider
         self.provider_cb = QComboBox()
         self.provider_cb.addItems(['google', 'ollama', 'openrouter'])
         self.provider_cb.setCurrentText(self.settings['provider'])
         self.provider_cb.currentTextChanged.connect(self._on_provider_change)
         layout.addRow('Default Provider:', self.provider_cb)
+
         # Model
         self.model_cb = QComboBox()
         self.model_cb.setEditable(True)
         layout.addRow('Default Model:', self.model_cb)
-        # Initialize model list
         self._on_provider_change(self.settings['provider'])
 
         # Temperature
+        temp_layout = QHBoxLayout()
         self.temp_spin = QSpinBox()
         self.temp_spin.setRange(0, 100)
         self.temp_spin.setValue(int(self.settings['temperature'] * 100))
         self.temp_label = QLabel(f"{self.settings['temperature']:.2f}")
         self.temp_spin.valueChanged.connect(self._on_temp_change)
-        hl = QHBoxLayout()
-        hl.addWidget(self.temp_spin)
-        hl.addWidget(self.temp_label)
-        layout.addRow('Default Temperature:', hl)
+        temp_layout.addWidget(self.temp_spin)
+        temp_layout.addWidget(self.temp_label)
+        layout.addRow('Default Temperature:', temp_layout)
 
         # Short-chapter word limit
         self.limit_spin = QSpinBox()
@@ -119,7 +111,7 @@ class SettingsDialog(QDialog):
         layout.addRow('Chapter summary length:', self.length_cb)
 
         # Skip estimation
-        self.skip_chk = QCheckBox('Skip cost estimation by default')
+        self.skip_chk = QCheckBox('Skip cost estimation')
         self.skip_chk.setChecked(self.settings['skip_estimation'])
         layout.addRow(self.skip_chk)
 
@@ -137,10 +129,7 @@ class SettingsDialog(QDialog):
         if avail:
             self.model_cb.addItems(avail)
             cur = self.settings.get('model')
-            if cur in avail:
-                self.model_cb.setCurrentText(cur)
-            else:
-                self.model_cb.setCurrentText(get_default_model(prov) or avail[0])
+            self.model_cb.setCurrentText(cur if cur in avail else get_default_model(prov) or avail[0])
 
     def _on_temp_change(self, val):
         t = val / 100.0
@@ -158,25 +147,20 @@ class SettingsDialog(QDialog):
 # ------------------------------------------------------------------
 # Worker Thread
 class WorkerThread(QThread):
-    parsing_complete = pyqtSignal(list)
-    estimation_complete = pyqtSignal(dict, float)
-    summarization_stats = pyqtSignal(dict)
-    abridgment_complete = pyqtSignal(str)
-    progress_update = pyqtSignal(int, str)
-    error_occurred = pyqtSignal(str)
+    parsing_complete       = pyqtSignal(list)
+    estimation_complete    = pyqtSignal(dict, float)
+    summarization_details  = pyqtSignal(list)
+    abridgment_complete    = pyqtSignal(str)
+    progress_update        = pyqtSignal(int, str)
+    error_occurred         = pyqtSignal(str)
 
-    def __init__(
-        self,
-        input_path: str,
-        output_path: str,
-        settings: dict
-    ):
+    def __init__(self, input_path, output_path, settings: dict):
         super().__init__()
-        self.input_path = input_path
+        self.input_path  = input_path
         self.output_path = output_path
-        self.settings = settings
+        self.settings    = settings
         self.mutex = QMutex()
-        self.wait = QWaitCondition()
+        self.wait  = QWaitCondition()
         self._continue = False
 
     def run(self):
@@ -184,8 +168,6 @@ class WorkerThread(QThread):
             # 1) Parse
             self.progress_update.emit(0, 'Parsing EPUB...')
             chapters, metadata = parse_epub(self.input_path)
-            if not chapters:
-                raise ValueError('No chapters parsed.')
             info = [
                 {'title': d.metadata['chapter_title'], 'tokens': d.metadata.get('token_count')}
                 for d in chapters
@@ -195,9 +177,7 @@ class WorkerThread(QThread):
             # 2) Cost estimation
             if not self.settings['skip_estimation']:
                 self.progress_update.emit(5, 'Estimating cost...')
-                tokens, cost = estimate_abridgment_cost(
-                    chapters, self.settings['model']
-                )
+                tokens, cost = estimate_abridgment_cost(chapters, self.settings['model'])
                 self.estimation_complete.emit(tokens, cost)
                 self.mutex.lock()
                 self.wait.wait(self.mutex)
@@ -218,29 +198,36 @@ class WorkerThread(QThread):
             )
             summaries = engine.abridge_documents(chapters)
 
-            # emit summarization stats
-            error_count = sum(1 for s in summaries if s.startswith('[Error summarizing chapter'))
-            stats = {'skipped': len(engine.skipped_chapters), 'errors': error_count}
-            self.summarization_stats.emit(stats)
+            # Build per-chapter details
+            details = []
+            for doc, summary in zip(chapters, summaries):
+                title   = doc.metadata['chapter_title']
+                orig    = len(doc.page_content.split())
+                summ    = len(summary.split())
+                skipped = (summary.strip() == doc.page_content.strip())
+                error   = summary.startswith('[Error summarizing')
+                details.append({
+                    'title': title,
+                    'orig_wc': orig,
+                    'sum_wc': summ,
+                    'skipped': skipped,
+                    'error': error
+                })
+            self.summarization_details.emit(details)
 
             for idx, _ in enumerate(summaries, start=1):
                 pct = 25 + int((idx / len(summaries)) * 60)
                 self.progress_update.emit(pct, f'Chapter {idx}/{len(summaries)} done')
             self.progress_update.emit(85, 'Chapters summarized.')
 
-            # 4) Overall summary
-            self.progress_update.emit(85, 'Overall summary...')
-            overall = engine.summarize_book_overall(summaries)
-            self.progress_update.emit(95, 'Overall summary done.')
-
-            # 5) Build EPUB
+            # 4) Build EPUB
             self.progress_update.emit(95, 'Building EPUB...')
-            orig = ebooklib.epub.read_epub(self.input_path)
+            orig_book = ebooklib.epub.read_epub(self.input_path)
             success = build_epub(
                 chapter_summaries=summaries,
-                overall_summary=overall,
+                overall_summary=engine.summarize_book_overall(summaries),
                 parsed_docs=chapters,
-                original_book=orig,
+                original_book=orig_book,
                 epub_metadata=metadata,
                 output_path=self.output_path
             )
@@ -279,7 +266,10 @@ class AbridgerWindow(QMainWindow):
         menubar = QMenuBar(self)
         settings_act = QAction('Settings', self)
         settings_act.triggered.connect(self.open_settings_dialog)
+        about_act    = QAction('About', self)
+        about_act.triggered.connect(self.show_about_dialog)
         menubar.addAction(settings_act)
+        menubar.addAction(about_act)
         self.setMenuBar(menubar)
 
         central = QWidget()
@@ -306,22 +296,22 @@ class AbridgerWindow(QMainWindow):
         v_ch.addWidget(self.chapter_list)
         layout.addWidget(group_ch)
 
-        # Estimation
-        group_est = QGroupBox('Estimation')
-        v_est = QVBoxLayout(group_est)
-        self.est_text = QTextEdit()
-        self.est_text.setReadOnly(True)
-        self.est_text.setFixedHeight(80)
-        v_est.addWidget(self.est_text)
-        layout.addWidget(group_est)
+        # Summary Stats
+        group_stats = QGroupBox('Summary Stats')
+        v_stats = QVBoxLayout(group_stats)
+        self.stats_text = QTextEdit()
+        self.stats_text.setReadOnly(True)
+        self.stats_text.setFixedHeight(150)
+        v_stats.addWidget(self.stats_text)
+        layout.addWidget(group_stats)
 
-        # Buttons
+        # Controls
         h_btn = QHBoxLayout()
-        self.start_btn = QPushButton('Estimate & Abridge')
+        self.start_btn = QPushButton('Abridge')
         self.start_btn.clicked.connect(self.start_processing)
-        self.start_btn.setEnabled(False)
         self.cancel_btn = QPushButton('Cancel')
         self.cancel_btn.clicked.connect(self.cancel_processing)
+        self.start_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
         h_btn.addWidget(self.start_btn)
         h_btn.addWidget(self.cancel_btn)
@@ -336,6 +326,15 @@ class AbridgerWindow(QMainWindow):
         h_prog.addWidget(self.status_lbl)
         layout.addLayout(h_prog)
 
+    def show_about_dialog(self):
+        text = (
+            "<b>eBook Abridger</b><br>"
+            "Version 1.0<br><br>"
+            "Contact: rejozacharia@gmail.com<br>"
+            "GitHub: <a href=\"https://github.com/rejozacharia/ebook-abridger\">https://github.com/rejozacharia/ebook-abridger</a>"
+        )
+        QMessageBox.about(self, 'About eBook Abridger', text)
+
     def open_settings_dialog(self):
         dlg = SettingsDialog(self, self.settings)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -344,42 +343,35 @@ class AbridgerWindow(QMainWindow):
 
     def select_input_file(self):
         fp, _ = QFileDialog.getOpenFileName(self, 'Select Input EPUB', '', 'EPUB Files (*.epub)')
-        if not fp:
-            return
-        self.input_file = fp
-        self.input_label.setText(f'Input: {os.path.basename(fp)}')
-        base, ext = os.path.splitext(fp)
-        self.output_file = f'{base}-abridged{ext}'
-        self.output_label.setText(f'Output: {os.path.basename(self.output_file)}')
-        self.start_btn.setEnabled(True)
+        if fp:
+            self.input_file = fp
+            self.input_label.setText(f'Input: {os.path.basename(fp)}')
+            base, ext = os.path.splitext(fp)
+            self.output_file = f'{base}-abridged{ext}'
+            self.output_label.setText(f'Output: {os.path.basename(self.output_file)}')
+            self.start_btn.setEnabled(True)
 
     def select_output_file(self):
         fp, _ = QFileDialog.getSaveFileName(self, 'Select Output EPUB', self.output_file or '', 'EPUB Files (*.epub)')
-        if not fp:
-            return
-        if not fp.lower().endswith('.epub'):
-            fp += '.epub'
-        self.output_file = fp
-        self.output_label.setText(f'Output: {os.path.basename(fp)}')
+        if fp:
+            if not fp.lower().endswith('.epub'):
+                fp += '.epub'
+            self.output_file = fp
+            self.output_label.setText(f'Output: {os.path.basename(fp)}')
 
     def start_processing(self):
         if not (self.input_file and self.output_file):
             QMessageBox.warning(self, 'Missing Files', 'Select both input and output EPUB.')
             return
-
         self.start_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
         self.progress.setValue(0)
         self.status_lbl.setText('Starting...')
 
-        self.worker = WorkerThread(
-            self.input_file,
-            self.output_file,
-            self.settings
-        )
+        self.worker = WorkerThread(self.input_file, self.output_file, self.settings)
         self.worker.parsing_complete.connect(self._on_parsed)
         self.worker.estimation_complete.connect(self._on_estimation)
-        self.worker.summarization_stats.connect(self._on_summarization_stats)
+        self.worker.summarization_details.connect(self._on_summary_details)
         self.worker.progress_update.connect(self._on_progress)
         self.worker.abridgment_complete.connect(self._on_success)
         self.worker.error_occurred.connect(self._on_error)
@@ -391,20 +383,20 @@ class AbridgerWindow(QMainWindow):
             self.chapter_list.addItem(QListWidgetItem(f"{info['title']} (Tokens: {info['tokens']})"))
 
     def _on_estimation(self, tokens, cost):
-        if not self.settings['skip_estimation']:
-            msg = '\n'.join(f"{k}: {v}" for k, v in tokens.items()) + f"\nCost: ${cost:.4f}"
-            resp = QMessageBox.question(self, 'Confirm', msg,
-                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            cont = (resp == QMessageBox.StandardButton.Yes)
-            self.worker.resume_after_estimation(cont)
-            if not cont:
-                self.cancel_processing()
-        else:
-            self.worker.resume_after_estimation(True)
+        msg = '\n'.join(f"{k}: {v}" for k, v in tokens.items()) + f"\nCost: ${cost:.4f}"
+        resp = QMessageBox.question(self, 'Confirm Cost', msg,
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        proceed = (resp == QMessageBox.StandardButton.Yes)
+        self.worker.resume_after_estimation(proceed)
+        if not proceed:
+            self.cancel_processing()
 
-    def _on_summarization_stats(self, stats):
-        msg = f"Skipped chapters: {stats['skipped']}\nErrors: {stats['errors']}"
-        QMessageBox.information(self, 'Summarization Report', msg)
+    def _on_summary_details(self, details):
+        lines = []
+        for d in details:
+            flag = 'SKIPPED' if d['skipped'] else ('ERROR' if d['error'] else '')
+            lines.append(f"{d['title']}: {d['sum_wc']} words (orig {d['orig_wc']}) {flag}")
+        self.stats_text.setPlainText("\n".join(lines))
 
     def _on_progress(self, val, text):
         self.progress.setValue(val)
@@ -415,7 +407,7 @@ class AbridgerWindow(QMainWindow):
         self.progress.setValue(100)
         self.start_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
-        QMessageBox.information(self, 'Done', f'Abridged book saved to:\n{path}')
+        QMessageBox.information(self, 'Done', f'Abridged saved to:\n{path}')
 
     def _on_error(self, err):
         self.status_lbl.setText('Error')
