@@ -80,13 +80,13 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
 
 2. **Edit `config.yaml`** to adjust summary‑length percentages, add/change models (these appear in GUI) and their pricing :
    ```yaml
-   chapter_summary_lengths:
-     very_short: "10-15%"
-     short: "20-25%"
-     medium: "35-50%"
-     long: "50-75%"
-   default_chapter_summary_length: "short"
-  
+    chapter_summary_lengths:
+      very_short: "10-15%"
+      short: "20-25%"
+      medium: "35-50%"
+      long: "50-75%"
+    default_chapter_summary_length: "short"
+
     models:
       google:
         default: "gemini-2.0-flash"
