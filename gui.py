@@ -31,10 +31,12 @@ DEFAULT_CHAPTER_SUMMARY_LENGTH = CONFIG.get('default_chapter_summary_length')
 # Constants for settings persistence
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 # ------------------------------------------------------------------
-
+# Configure logging
 logging.basicConfig(
+    filename='abridger_engine.log',
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [%(module)s] %(message)s'
+    format='%(asctime)s - %(levelname)s - [%(module)s] %(message)s',
+    force=True
 )
 
 def load_user_settings() -> dict:

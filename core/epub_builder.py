@@ -9,11 +9,7 @@ from bs4 import BeautifulSoup  # kept in case you need to preserve extra structu
 from langchain_core.documents import Document  # your parsed-doc type
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def build_epub(
     chapter_summaries: List[str],

@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 
 from core.config_loader import load_env, load_config
 
-# ─── Logging setup ─────────────────────────────────────────────────────────────
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ─── Load environment variables & config file ─────────────────────────────────
