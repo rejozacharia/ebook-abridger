@@ -42,7 +42,7 @@ ebook-abridger/
 ├── main.py                   # CLI entrypoint
 ├── config.yaml               # Non-sensitive defaults & model/pricing configs
 ├── user_settings.json        # Persisted GUI overrides (created on first run)
-├── .env.tempate              # Rename to .env and add your API keys
+├── .env.template             # Rename to .env and add your API keys
 ├── requirements.txt          # Python dependencies
 └── build.spec                # PyInstaller spec for GUI/CLI
 ```
