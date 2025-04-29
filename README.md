@@ -53,8 +53,8 @@ ebook-abridger/
 
 ### Option 1: Using Pre-built Executables (Recommended)
 
-1.  **Download:** Go to the [Releases page](https://github.com/rejozacharia/ebook-abridger/releases) and download the `ebook-abridger.zip` file from the latest release.
-2.  **Extract:** Unzip the downloaded file to a location of your choice. This will create an `ebook-abridger` folder containing the application executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`), configuration files (`config.yaml`, `.env.template`), and necessary resources.
+1.  **Download (Windows Only):** Go to the [Releases page](https://github.com/rejozacharia/ebook-abridger/releases) and download the `ebook-abridger.zip` file from the latest release. **Note:** These pre-built executables are currently only available for Windows. macOS and Linux users should follow Option 2 below.
+2.  **Extract:** Unzip the downloaded file to a location of your choice. This will create an `ebook-abridger` folder containing the Windows application executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`), configuration files (`config.yaml`, `.env.template`), and necessary resources.
 
 ### Option 2: From Source (For Development)
 
@@ -138,29 +138,23 @@ Configuration is done via two files located in the main application directory (e
 
 After installation and configuration:
 
-### Using Executables (Downloaded from Releases)
+### Using Windows Executables (Downloaded from Releases)
 
 Navigate to the directory where you extracted `ebook-abridger.zip`.
 
 **GUI:**
 
-Double-click `ebook_abridger_gui.exe` or run it from your terminal within that directory:
+Double-click `ebook_abridger_gui.exe` or run it from your Windows Command Prompt or PowerShell within that directory:
 ```bash
-# Windows Command Prompt or PowerShell:
 .\ebook_abridger_gui.exe
-# macOS/Linux (if built for those platforms):
-./ebook_abridger_gui
 ```
-The GUI allows you to select input/output files and configure settings visually (screenshots below).
+The GUI allows you to select input/output files and configure settings visually (see [Screenshots](#-screenshots)).
 
 **CLI:**
 
-Run the CLI executable from your terminal within the extracted directory:
+Run the CLI executable from your Windows Command Prompt or PowerShell within the extracted directory:
 ```bash
-# Windows Command Prompt or PowerShell:
 .\ebook_abridger_cli.exe <input.epub> <output.epub> [options]
-# macOS/Linux (if built for those platforms):
-./ebook_abridger_cli <input.epub> <output.epub> [options]
 ```
 **Common Options:**
 ```
@@ -217,16 +211,18 @@ python gui.py
 
 ## 📦 Building Executables (Optional)
 
-Pre-built executables are available on the [Releases page](https://github.com/rejozacharia/ebook-abridger/releases). This section is only necessary if you want to build the executables yourself from the source code.
+Pre-built **Windows** executables are available on the [Releases page](https://github.com/rejozacharia/ebook-abridger/releases). This section is only necessary if you want to build the executables yourself from the source code, or if you need to build for **macOS** or **Linux**.
+
+**Important:** PyInstaller bundles the application based on the operating system it is run on. To create a Windows executable, run PyInstaller on Windows. To create a macOS executable, run it on macOS. To create a Linux executable, run it on Linux. You cannot cross-compile directly.
 
 Requires [PyInstaller](https://www.pyinstaller.org/):
 ```bash
 # Ensure you are in the activated virtual environment
 pip install pyinstaller
-# Run from the project root directory
+# Run from the project root directory ON THE TARGET OS
 pyinstaller build.spec
 ```
-Executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`) and supporting files will be output to the `dist/ebook_abridger` directory.
+Executables (e.g., `.exe` on Windows, `.app` or Unix executable on macOS/Linux) and supporting files will be output to the `dist/ebook_abridger` directory.
 
 ---
 
