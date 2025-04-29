@@ -228,7 +228,9 @@ Executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`) and supporting 
 ---
 
 ## 📝 License
-Apache 2.0 
+
+This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
+
 ---
 
 ## 👀 Future Improvements
