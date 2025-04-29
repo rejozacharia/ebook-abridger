@@ -151,7 +151,7 @@ Double-click `ebook_abridger_gui.exe` or run it from your terminal within that d
 # macOS/Linux (if built for those platforms):
 ./ebook_abridger_gui
 ```
-The GUI allows you to select input/output files and configure settings visually.
+The GUI allows you to select input/output files and configure settings visually (screenshots below).
 
 **CLI:**
 
@@ -202,13 +202,15 @@ python gui.py
 
 ---
 
-*(Screenshots remain the same)*
+## 📸 Screenshots
 
+**Main Window:**
 <img src="screenshots/mainwindow.png" alt="App GUI" style="width:75%;" />
-Completed view
-<img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
-- **Settings**: configure provider, model, temperature, word limit, summary length, skip estimation.
 
+**Completed View:**
+<img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
+
+**Settings Window:**
 ![Settings window](screenshots/settings.png)
 
 ---
