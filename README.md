@@ -25,27 +25,19 @@ Provides both a Command‑Line Interface (CLI) and a Graphical User Interface (G
 
 ---
 
-## 📁 Project Structure
+## 📸 Screenshots
 
-```
-ebook-abridger/
-├── core/                     # Engine & utility modules
-│   ├── __init__.py           # Marks this directory as a Python package
-│   ├── config_loader.py      # YAML & .env loader helper
-│   ├── cost_estimator.py     # Token & cost estimation logic
-│   ├── epub_builder.py       # Rebuild EPUB with summaries
-│   ├── epub_parser.py        # EPUB → Document parsing
-│   ├── llm_config.py         # Loads .env & YAML, provides LLM factories
-│   ├── prompts.py            # PromptTemplate factories for map/combine/overall
-│   └── summarizer.py         # SummarizationEngine (chapters + overall)
-├── gui.py                    # PyQt6 graphical interface entrypoint
-├── main.py                   # CLI entrypoint
-├── config.yaml               # Non-sensitive defaults & model/pricing configs
-├── user_settings.json        # Persisted GUI overrides (created on first run)
-├── .env.template             # Rename to .env and add your API keys
-├── requirements.txt          # Python dependencies
-└── build.spec                # PyInstaller spec for GUI/CLI
-```
+**Main Window:**
+
+<img src="screenshots/mainwindow.png" alt="App GUI" style="width:75%;" />
+
+**Completed View:**
+
+<img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
+
+**Settings Window:**
+
+![Settings window](screenshots/settings.png)
 
 ---
 
@@ -196,19 +188,27 @@ python gui.py
 
 ---
 
-## 📸 Screenshots
+## 📁 Project Structure
 
-**Main Window:**
-
-<img src="screenshots/mainwindow.png" alt="App GUI" style="width:75%;" />
-
-**Completed View:**
-
-<img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
-
-**Settings Window:**
-
-![Settings window](screenshots/settings.png)
+```
+ebook-abridger/
+├── core/                     # Engine & utility modules
+│   ├── __init__.py           # Marks this directory as a Python package
+│   ├── config_loader.py      # YAML & .env loader helper
+│   ├── cost_estimator.py     # Token & cost estimation logic
+│   ├── epub_builder.py       # Rebuild EPUB with summaries
+│   ├── epub_parser.py        # EPUB → Document parsing
+│   ├── llm_config.py         # Loads .env & YAML, provides LLM factories
+│   ├── prompts.py            # PromptTemplate factories for map/combine/overall
+│   └── summarizer.py         # SummarizationEngine (chapters + overall)
+├── gui.py                    # PyQt6 graphical interface entrypoint
+├── main.py                   # CLI entrypoint
+├── config.yaml               # Non-sensitive defaults & model/pricing configs
+├── user_settings.json        # Persisted GUI overrides (created on first run)
+├── .env.template             # Rename to .env and add your API keys
+├── requirements.txt          # Python dependencies
+└── build.spec                # PyInstaller spec for GUI/CLI
+```
 
 ---
 
@@ -240,4 +240,3 @@ This project is licensed under the Apache License, Version 2.0. See the [LICENSE
 - Parallelize chapter summarization.
 - LangChain caching for repeated runs.
 - Enhanced cost heuristics per chain type.
-
