@@ -11,6 +11,7 @@ Provides both a Command‑Line Interface (CLI) and a Graphical User Interface (G
 - **EPUB I/O**: Read standard EPUBs and write abridged EPUBs, preserving metadata (title, author, language).
 - **AI‑Powered Summaries**: Chapter‑by‑chapter summarization via LangChain `map_reduce`, followed by an overall book summary.
 - **Summary‑Length Control**: Choose among multiple length presets (e.g. `very_short`, `short`, `medium`, `long`) defined in `config.yaml`.
+- **Genre Auto-detection**: Auto-detect genre(fiction vs non-fiction) and dynamically adjust prompts
 - **Skip Short Chapters**: Chapters under a configurable word‑count threshold bypass summarization and are passed through unaltered.
 - **Error Handling**: Tracks and reports any chapters that failed to summarize due to API errors.
 - **Cost Estimation**: Estimates token usage and cost (for API‑based LLMs), with optional confirmation prompt.
@@ -140,8 +141,11 @@ python main.py book.epub book_abridged.epub -p google -m gemini-1.5-pro -l mediu
 ```bash
 python gui.py
 ```
+![Main window](screenshots/mainwindow.png)
+Completed view
+![Main window completed](screenshots/maincomplete.png)
 - **Settings**: configure provider, model, temperature, word limit, summary length, skip estimation.
-- **About**: shows version, contact (`rejozacharia@gmail.com`), GitHub link.
+![Settings window](screenshots/settings.png)
 - **Abridge**: triggers parse → summary → build, shows per‑chapter stats in panel.
 
 ---
