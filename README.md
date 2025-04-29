@@ -14,7 +14,7 @@ Provides both a Command‑Line Interface (CLI) and a Graphical User Interface (G
 - **Genre Auto-detection**: Auto-detect genre(fiction vs non-fiction) and dynamically adjust prompts.
 - **Skip Short Chapters**: Chapters under a configurable word‑count threshold bypass summarization and are passed through unaltered.
 - **Error Handling**: Tracks and reports any chapters that failed to summarize due to API errors.
-- **Cost Estimation**: Estimates token usage and cost (for API‑based LLMs), with optional confirmation prompt.
+- **Cost Estimation**: Estimates approximate token usage and cost (for API‑based LLMs), with optional confirmation prompt.
 - **Dual Interface**:
   - **CLI** (`main.py`): Fully scriptable, supports `-y` to skip confirmation.
   - **GUI** (`gui.py`): PyQt6 app with Settings and About dialogs, progress bar, per‑chapter stats panel.
@@ -199,12 +199,15 @@ python gui.py
 ## 📸 Screenshots
 
 **Main Window:**
+
 <img src="screenshots/mainwindow.png" alt="App GUI" style="width:75%;" />
 
 **Completed View:**
+
 <img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
 
 **Settings Window:**
+
 ![Settings window](screenshots/settings.png)
 
 ---
