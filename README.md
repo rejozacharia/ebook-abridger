@@ -143,7 +143,7 @@ python gui.py
 ```
 Here’s the GUI of the app:
 
-<img src="images/mainwindow.png" alt="App GUI" style="width:75%;" />
+<img src="screenshots/mainwindow.png" alt="App GUI" style="width:75%;" />
 
 Completed view
 
