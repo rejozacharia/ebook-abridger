@@ -235,8 +235,9 @@ This project is licensed under the Apache License, Version 2.0. See the [LICENSE
 
 ---
 
-## 👀 Future Improvements
+## 👀 Future Enhancements
 
+- Extend support to other ebook formats (for e.g. MOBI)
+- Provide functionality for end-users to do prompt engineering (both chapter and summary).
 - Parallelize chapter summarization.
-- LangChain caching for repeated runs.
 - Enhanced cost heuristics per chain type.
