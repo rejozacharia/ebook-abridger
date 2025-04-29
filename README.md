@@ -208,8 +208,8 @@ python gui.py
 Completed view
 <img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
 - **Settings**: configure provider, model, temperature, word limit, summary length, skip estimation.
+
 ![Settings window](screenshots/settings.png)
-- **Abridge**: triggers parse → summary → build, shows per‑chapter stats in panel.
 
 ---
 
@@ -225,12 +225,10 @@ pip install pyinstaller
 pyinstaller build.spec
 ```
 Executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`) and supporting files will be output to the `dist/ebook_abridger` directory.
-
 ---
 
 ## 📝 License
-Apache © Rejo Mathew
-
+Apache 2.0 
 ---
 
 ## 👀 Future Improvements
