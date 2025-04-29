@@ -225,6 +225,7 @@ pip install pyinstaller
 pyinstaller build.spec
 ```
 Executables (`ebook_abridger_gui.exe`, `ebook_abridger_cli.exe`) and supporting files will be output to the `dist/ebook_abridger` directory.
+
 ---
 
 ## 📝 License
