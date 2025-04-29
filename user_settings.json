@@ -4,6 +4,6 @@
   "temperature": 0.3,
   "skip_estimation": false,
   "short_chapter_word_limit": 150,
-  "summary_length_key": "short",
+  "summary_length_key": "medium",
   "chapter_word_limit": 150
 }

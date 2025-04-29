@@ -3,48 +3,73 @@ import yaml
 from langchain_core.prompts import PromptTemplate
 from core.config_loader import load_config
 
-_CFG = load_config()   # no args → uses project‐root config.yaml
+# Load project configuration
+_CFG = load_config()   # no args → uses project-root config.yaml
 
-
+# Map of user-friendly length keys to reduction percentages
 LENGTH_MAP = _CFG["chapter_summary_lengths"]
+# Default length key if user provides none or invalid
 DEFAULT_LENGTH = _CFG.get("default_summary_length", "short")
 
 
-# --- Map Prompt Template ---
-# This prompt is applied to each chapter individually.
-
 def get_map_prompt(summary_length_key: str | None = None) -> PromptTemplate:
     """
-    Returns the PromptTemplate for per-chapter summarization, 
-    using the configured reduction percentage.
+    Returns a PromptTemplate for per-chapter summarization.
+    The template adapts to genre and dynamic length bounds supplied at formatting time.
+
+    Input variables:
+      - text: the full chapter text
+      - genre: 'Fiction' or 'Non-Fiction'
+      - length: the user-selected key (very_short/short/medium/long)
+      - length_percent: the numeric percentage (e.g. 25)
+      - length_words: approximate target word count (upper bound)
+      - min_length_words: approximate minimum word count (lower bound)
     """
     key = summary_length_key or DEFAULT_LENGTH
-    reduction = LENGTH_MAP.get(key, LENGTH_MAP[DEFAULT_LENGTH])
+    raw_pct = LENGTH_MAP.get(key, LENGTH_MAP[DEFAULT_LENGTH])
+    # strip trailing '%' if present
+    if isinstance(raw_pct, str) and raw_pct.endswith('%'):
+        length_pct = int(raw_pct.rstrip('%'))
+    else:
+        length_pct = int(raw_pct)
+    # upper bound words
+    # actual word count computed at runtime, placeholder here
+    # min percent = max(length_pct - 10, 10)
+    min_pct = max(length_pct - 10, 10)
 
-    template = f"""
-    You are an expert literary assistant tasked with creating an engaging abridged version of a book chapter.
+    template = """
+SYSTEM:
+You are an expert literary summarization assistant. Your task is to produce an abridged version of a text that:
 
-    **Instructions:**
+- Keeps the author's voice & style: where appropriate, include up to two brief verbatim excerpts (≤2 sentences each) to preserve tone.
+- Preserves key content: retell crucial plot points (for fiction) or core concepts, arguments, and terminology (for non-fiction) accurately.
+- Adapts to genre:
+    • If Fiction: focus on narrative flow, character arcs, and memorable dialogue.
+    • If Non-Fiction: emphasize definitions, evidence, logical structure, and data.
+- **Length Constraints:** Your summary must be at least {min_length_words} words and must not exceed {length_words} words.
 
-    1.  **Summarize Concisely:** Reduce the chapter text to approximately {reduction} of its original length. Focus on the most crucial plot points, character developments, and thematic elements.
-    2.  **Preserve Key Elements:** Retain important dialogue, memorable anecdotes, significant descriptions, and critical events.
-    3.  **Maintain Narrative Voice:** The abridged version should reflect the original author's tone and style.
-    4.  **Ensure Clarity and Flow:** The resulting text must be coherent and readable.
-    5.  **Focus on this Chapter:** Primarily summarize *this specific chapter*.
+USER:
+Genre: **{genre}**  
+Desired length: **{length}**  
+Allowed range: **{min_length_words}–{length_words} words**  
+Approximate ratio: **{length_percent}%** (upper bound)
 
-    **Input Chapter Text:**
-    ```text
-    {{text}}
-    ```
+**Input Text:**
+```text
+{text}
+```
 
-    **Output:**
-    Provide the abridged version of the chapter based on the instructions above. Output only the abridged text, without any introductory phrases like "Here is the abridged version:".
+**Output:**
+Deliver only the abridged text—strictly between the given word limits, without headers or disclaimers.
+"""
+    return PromptTemplate(
+        template=template,
+        input_variables=[
+            "text", "genre", "length", "length_percent", "length_words", "min_length_words"
+        ]
+    )
 
-    **Abridged Chapter:**
-    """
-    return PromptTemplate(template=template, input_variables=["text"])
-
-
+# Combine chapters into a single narrative
 combine_template_string = """
 You are an expert literary editor tasked with assembling a coherent and engaging narrative from a series of abridged book chapters.
 Your goal is to synthesize these summaries into a single, flowing text that represents the core story of the book.
@@ -60,7 +85,6 @@ Your goal is to synthesize these summaries into a single, flowing text that repr
 ```text
 {text}
 ```
-*(The summaries above are concatenated results from the individual chapter abridgments)*
 
 **Output:**
 Provide the final, synthesized abridged text based on the instructions above. Output only the combined text.
@@ -73,10 +97,7 @@ COMBINE_PROMPT = PromptTemplate(
     input_variables=["text"]
 )
 
-
-# --- Overall Book Summary Prompt Template ---
-# This prompt takes the concatenated chapter summaries and creates a final book summary.
-
+# Overall book summary prompt (genre-agnostic)
 overall_summary_template_string = """
 You are an expert literary critic tasked with writing a concise summary of a book based on its chapter summaries.
 Your goal is to provide a high-level overview of the book's main plot, themes, and conclusions.
@@ -87,7 +108,7 @@ Your goal is to provide a high-level overview of the book's main plot, themes, a
 2.  **Extract Key Themes:** Determine the primary themes or messages conveyed throughout the summaries.
 3.  **Synthesize Concisely:** Write a brief, coherent summary (e.g., 4-6 paragraphs) that captures the essence of the book as represented by the chapter summaries. Focus on the overall picture, not granular chapter details.
 4.  **Maintain Neutral Tone:** Present the summary objectively.
-5.  **Final Output:** Produce only the final book summary text, without any introductory phrases like "Here is the book summary:".
+5.  **Final Output:** Produce only the final book summary text, without any introductory phrases like "Here is the book summary:.".
 
 **Input Chapter Summaries (Concatenated):**
 ```text
@@ -105,3 +126,21 @@ OVERALL_SUMMARY_PROMPT = PromptTemplate(
     input_variables=["text"]
 )
 
+# Fallback one-paragraph prompt
+early_fallback_template = """
+SYSTEM:
+You are a helpful summarization assistant. Summarize the following chapter text in one concise paragraph.
+
+USER:
+```text
+{text}
+```
+
+OUTPUT:
+Provide only the one-paragraph summary.
+"""
+
+FALLBACK_PROMPT = PromptTemplate(
+    template=early_fallback_template,
+    input_variables=["text"]
+)
