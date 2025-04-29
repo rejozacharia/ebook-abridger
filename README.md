@@ -147,7 +147,7 @@ Here’s the GUI of the app:
 
 Completed view
 
-![Main window completed](screenshots/maincomplete.png)
+<img src="screenshots/maincomplete.png" alt="App Complete GUI" style="width:75%;" />
 
 - **Settings**: configure provider, model, temperature, word limit, summary length, skip estimation.
 ![Settings window](screenshots/settings.png)
