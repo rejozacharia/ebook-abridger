@@ -11,7 +11,7 @@ Provides both a Command‑Line Interface (CLI) and a Graphical User Interface (G
 - **EPUB I/O**: Read standard EPUBs and write abridged EPUBs, preserving metadata (title, author, language).
 - **AI‑Powered Summaries**: Chapter‑by‑chapter summarization via LangChain `map_reduce`, followed by an overall book summary.
 - **Summary‑Length Control**: Choose among multiple length presets (e.g. `very_short`, `short`, `medium`, `long`) defined in `config.yaml`.
-- **Genre Auto-detection**: Auto-detect genre(fiction vs non-fiction) and dynamically adjust prompts
+- **Genre Auto-detection**: Auto-detect genre(fiction vs non-fiction) and dynamically adjust prompts.
 - **Skip Short Chapters**: Chapters under a configurable word‑count threshold bypass summarization and are passed through unaltered.
 - **Error Handling**: Tracks and reports any chapters that failed to summarize due to API errors.
 - **Cost Estimation**: Estimates token usage and cost (for API‑based LLMs), with optional confirmation prompt.
@@ -82,10 +82,10 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
 2. **Edit `config.yaml`** to adjust summary‑length percentages, add/change models (these appear in GUI) and their pricing :
    ```yaml
     chapter_summary_lengths:
-      very_short: "10-15%"
-      short: "20-25%"
-      medium: "35-50%"
-      long: "50-75%"
+      very_short: "15%"
+      short: "25%"
+      medium: "50%"
+      long: "75%"
     default_chapter_summary_length: "short"
 
     models:
@@ -141,9 +141,14 @@ python main.py book.epub book_abridged.epub -p google -m gemini-1.5-pro -l mediu
 ```bash
 python gui.py
 ```
-![Main window](screenshots/mainwindow.png)
+Here’s the GUI of the app:
+
+<img src="images/mainwindow.png" alt="App GUI" style="width:75%;" />
+
 Completed view
+
 ![Main window completed](screenshots/maincomplete.png)
+
 - **Settings**: configure provider, model, temperature, word limit, summary length, skip estimation.
 ![Settings window](screenshots/settings.png)
 - **Abridge**: triggers parse → summary → build, shows per‑chapter stats in panel.
