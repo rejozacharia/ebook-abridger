@@ -122,9 +122,23 @@ If using Ollama for local models, [install Ollama](https://ollama.com/) and ensu
 
 ## ▶️ Usage
 
-### CLI
+You can run the application using the provided Python scripts or the pre-built executables found in the `dist/ebook_abridger` directory after building (see [Building Executables](#-building-executables)).
+
+### Using Executables (Recommended for most users)
+
+Navigate to the `dist/ebook_abridger` directory in your terminal or file explorer.
+
+**GUI:**
+
+Double-click `ebook_abridger_gui.exe` or run from the terminal:
 ```bash
-python main.py <input.epub> <output.epub> \
+./ebook_abridger_gui.exe
+```
+The GUI provides the same functionality as described below.
+
+**CLI:**
+```bash
+./ebook_abridger_cli.exe <input.epub> <output.epub> \
   -p <provider> [-m <model>] [-t <temperature>] \
   [-w <word_limit>] [-l <length_key>] [-y]
 ```
@@ -134,10 +148,29 @@ python main.py <input.epub> <output.epub> \
 
 **Example**:
 ```bash
+./ebook_abridger_cli.exe book.epub book_abridged.epub -p google -m gemini-1.5-pro -l medium -y
+```
+
+---
+
+### Using Python Scripts (For development or customization)
+
+Ensure you have followed the [Installation](#-installation) and [Configuration](#-configuration) steps.
+
+**CLI:**
+```bash
+python main.py <input.epub> <output.epub> \
+  -p <provider> [-m <model>] [-t <temperature>] \
+  [-w <word_limit>] [-l <length_key>] [-y]
+```
+*(Parameters are the same as the CLI executable)*
+
+**Example**:
+```bash
 python main.py book.epub book_abridged.epub -p google -m gemini-1.5-pro -l medium -y
 ```
 
-### GUI
+**GUI:**
 ```bash
 python gui.py
 ```
