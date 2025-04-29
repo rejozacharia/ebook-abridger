@@ -15,9 +15,9 @@ Provides both a Command‑Line Interface (CLI) and a Graphical User Interface (G
 - **Skip Short Chapters**: Chapters under a configurable word‑count threshold bypass summarization and are passed through unaltered.
 - **Error Handling**: Tracks and reports any chapters that failed to summarize due to API errors.
 - **Cost Estimation**: Estimates approximate token usage and cost (for API‑based LLMs), with optional confirmation prompt.
-- **Dual Interface**:
-  - **CLI** (`main.py`): Fully scriptable, supports `-y` to skip confirmation.
-  - **GUI** (`gui.py`): PyQt6 app with Settings and About dialogs, progress bar, per‑chapter stats panel.
+- **Dual Interface** (via Python scripts or executables):
+  - **CLI** (`main.py` / `ebook_abridger_cli.exe`): Fully scriptable, supports command-line arguments including `-y` to skip cost confirmation.
+  - **GUI** (`gui.py` / `ebook_abridger_gui.exe`): User-friendly PyQt6 app with file selection, Settings and About dialogs, progress bar, and per‑chapter stats panel (see [Screenshots](#-screenshots)).
 - **Configurable LLM Providers**:
   - **Google Gemini** (via API key)
   - **Ollama** (local models)
